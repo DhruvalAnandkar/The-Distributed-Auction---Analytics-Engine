@@ -1,0 +1,13 @@
+{
+    "name": "distributed-auction-engine-root",
+    "version": "1.0.0",
+    "description": "Distributed Auction Engine Root",
+    "private": true,
+    "workspaces": [
+        "apps/*",
+        "packages/*"
+    ],
+    "scripts": {
+        "api-dev": "npm run dev --workspace=apps/api"
+    }
+}
