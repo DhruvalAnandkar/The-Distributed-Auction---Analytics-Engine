@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS auctions(
     start_price NUMERIC(12, 2) NOT NULL CHECK (start_price > 0),
     current_price NUMERIC(12, 2) NOT NULL CHECK (current_price >= start_price),
     status VARCHAR(20) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'ACTIVE', 'CLOSED')),
-    seller_id INTEGER REFRENCES users(id) ON DELETE CASCADE,
+    seller_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     ends_id TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
