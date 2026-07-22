@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 
 //Day 2: PostgreSQL database connection pool code updating health check endpoint to include database connection status
 import pool from './config/db.js';
+import userRoutes from './routes/userRoutes.js'; // <-- 1. Import the route
 
 //loading the environment variables
 dotenv.config();
@@ -14,6 +15,7 @@ const app = express();
 const PORT = process.env.PORT||5001;
 
 app.use(express.json());
+app.use('/api/users', userRoutes); // <-- 2. Use the route
 
 //foundation health check endpoints 
 //async function to check the health of the foundation
