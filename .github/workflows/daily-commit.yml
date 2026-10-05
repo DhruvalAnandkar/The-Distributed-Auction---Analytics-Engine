@@ -1,0 +1,35 @@
+name: Daily Repository Metrics
+
+on:
+  schedule:
+    - cron: '30 23 * * *' # Runs every day at 11:30 PM UTC
+  workflow_dispatch: # Allows you to trigger it manually from GitHub just to test it
+
+jobs:
+  update-metrics:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # SECURITY LOCK: This ensures the bot can only modify this specific repository
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Run daily automation script
+        run: node scripts/daily-automation.js
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "DhruvalAnandkar"
+          git config --global user.email "dhruvalabroad@gmail.com"
+          git add PROJECT_METRICS.md logs/automation.log README.md
+          # The || echo part prevents the workflow from crashing if no lines of code changed
+          git commit -m "chore(analytics): update daily repository metrics" || echo "No changes to commit"
+          git push
