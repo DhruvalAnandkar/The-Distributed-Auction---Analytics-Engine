@@ -9,5 +9,8 @@
     ],
     "scripts": {
         "api-dev": "npm run dev --workspace=apps/api"
+    },
+    "dependencies": {
+        "@google/generative-ai": "^0.24.1"
     }
 }

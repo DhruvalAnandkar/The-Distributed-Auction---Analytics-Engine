@@ -1,35 +1,43 @@
-name: Daily Repository Metrics
+name: Autonomous Code Documenter
 
 on:
   schedule:
-    - cron: '30 23 * * *' # Runs every day at 11:30 PM UTC
-  workflow_dispatch: # Allows you to trigger it manually from GitHub just to test it
+    - cron: '30 23 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
-  update-metrics:
+  auto-document:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # SECURITY LOCK: This ensures the bot can only modify this specific repository
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: main
+          persist-credentials: true
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
+          cache: npm
 
-      - name: Run daily automation script
-        run: node scripts/daily-automation.js
+      - name: Install Gemini SDK
+        run: npm install @google/generative-ai
 
-      - name: Commit and push changes
+      - name: Run autonomous code documenter
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: node scripts/auto-documenter.js
+
+      - name: Commit and push documented files
         run: |
           git config --global user.name "DhruvalAnandkar"
           git config --global user.email "dhruvalabroad@gmail.com"
-          git add PROJECT_METRICS.md logs/automation.log README.md
-          # The || echo part prevents the workflow from crashing if no lines of code changed
-          git commit -m "chore(analytics): update daily repository metrics" || echo "No changes to commit"
-          git push
+          git add -- '*.js' 'apps/**/*.js'
+          git diff --cached --quiet || git commit -m "docs: autonomously generate JSDoc comments for API gateway"
+          git push origin HEAD:main
