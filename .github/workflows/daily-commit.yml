@@ -38,6 +38,6 @@ jobs:
         run: |
           git config --global user.name "DhruvalAnandkar"
           git config --global user.email "dhruvalabroad@gmail.com"
-          git add -- '*.js' 'apps/**/*.js'
+          git add -- '*.js' 'apps/**/*.js' TODO.md
           git diff --cached --quiet || git commit -m "docs: autonomously generate JSDoc comments for API gateway"
           git push origin HEAD:main
