@@ -7,6 +7,8 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const ROOT_DIR = path.resolve(__dirname, '..');
 const API_DIR = path.join(ROOT_DIR, 'apps', 'api');
 const MODEL_NAME = 'gemini-3.8-flash';
+const MAX_RETRIES = 5;
+const INITIAL_BACKOFF_MS = 1000;
 const PROMPT =
   'You are an expert enterprise backend engineer. Add professional JSDoc comments to all functions, classes, and complex logic in this code. Return ONLY the raw code, without any markdown formatting, backticks, or explanations.';
 
@@ -64,6 +66,53 @@ function toPosixPath(filePath) {
   return path.relative(ROOT_DIR, filePath).split(path.sep).join('/');
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isServiceUnavailable(error) {
+  const status = error && (error.status || error.statusCode);
+  const message = String((error && error.message) || '');
+  const statusText = String((error && error.statusText) || '');
+
+  return (
+    status === 503 ||
+    /503/.test(message) ||
+    /service unavailable/i.test(message) ||
+    /service unavailable/i.test(statusText)
+  );
+}
+
+async function generateContentWithBackoff(model, prompt) {
+  let delayMs = INITIAL_BACKOFF_MS;
+  let lastError;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+    try {
+      return await model.generateContent(prompt);
+    } catch (error) {
+      lastError = error;
+
+      if (!isServiceUnavailable(error) || attempt === MAX_RETRIES) {
+        break;
+      }
+
+      console.warn(
+        `Gemini returned 503 Service Unavailable. Waiting ${delayMs}ms before retry ${attempt + 1}/${MAX_RETRIES}...`
+      );
+      await sleep(delayMs);
+      delayMs *= 2;
+    }
+  }
+
+  if (isServiceUnavailable(lastError)) {
+    console.error('Gemini generateContent failed after maximum retries:', lastError);
+    process.exit(0);
+  }
+
+  throw lastError;
+}
+
 async function main() {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -89,7 +138,10 @@ async function main() {
 
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({ model: MODEL_NAME });
-  const result = await model.generateContent(`${PROMPT}\n\n${originalSource}`);
+  const result = await generateContentWithBackoff(
+    model,
+    `${PROMPT}\n\n${originalSource}`
+  );
   const documentedSource = stripMarkdownFences(result.response.text());
 
   if (!documentedSource.trim()) {
