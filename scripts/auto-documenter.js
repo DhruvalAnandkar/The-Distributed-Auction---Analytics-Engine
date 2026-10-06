@@ -6,7 +6,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const API_DIR = path.join(ROOT_DIR, 'apps', 'api');
-const MODEL_NAME = 'gemini-2.5-flash';
+const MODEL_NAME = 'gemini-3.8-flash';
 const PROMPT =
   'You are an expert enterprise backend engineer. Add professional JSDoc comments to all functions, classes, and complex logic in this code. Return ONLY the raw code, without any markdown formatting, backticks, or explanations.';
 
