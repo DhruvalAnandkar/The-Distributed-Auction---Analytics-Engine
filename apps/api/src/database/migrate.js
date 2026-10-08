@@ -1,38 +1,66 @@
-// Day 3  We will do direct database migrations using node-postgres (pg) library. 
-// We will create a migration script that connects to the PostgreSQL database and executes SQL commands to create tables,
-// Insert initial data, or modify existing structures. 
-// This approach allows us to manage database schema changes programmatically and ensures that our database is in sync with our application code.
+/**
+ * @fileoverview Database migration execution script.
+ * Provides programmatic execution of schema definitions against the target PostgreSQL database
+ * using the configured node-postgres connection pool. Ensures state synchronization between
+ * application models and the persistent data tier.
+ * @module migrations/runMigrations
+ */
 
-import fs from'fs';
+import fs from 'fs';
 import path from 'path';
 import pool from '../config/db.js';
-import {fileURLToPath} from 'url';
+import { fileURLToPath } from 'url';
 
-//Recreate __dirname for ES modules
+/**
+ * Absolute filesystem path to the current module file.
+ * Required for POSIX-compliant path resolution in ECMAScript modules.
+ * @type {string}
+ */
 const __filename = fileURLToPath(import.meta.url);
+
+/**
+ * Absolute directory name of the current module.
+ * @type {string}
+ */
 const __dirname = path.dirname(__filename);
 
-
-// Function to run SQL migration scripts from the migrations directory
+/**
+ * Executes the schema migration script against the configured PostgreSQL database.
+ *
+ * Reads the raw SQL definitions from the local file system synchronously,
+ * issues the DDL/DML statements via the shared database pool, and ensures
+ * deterministic resource clean-up by terminating all active pool clients.
+ *
+ * @async
+ * @function runMigrations
+ * @returns {Promise<void>} Resolves when the migration completes and database connections are closed.
+ * @throws {Error} Logs errors encountered during file I/O or query execution to stderr.
+ */
 const runMigrations = async () => {
     console.log('[Migration] Starting database migrations...');
     try {
-        //1. Locate the schema.sql file
+        /**
+         * Absolute path to the migration SQL schema file.
+         * @type {string}
+         */
         const schemaPath = path.join(__dirname, 'schema.sql');
-        //2. Read the SQL file
+
+        /**
+         * Raw SQL buffer contents encoded as UTF-8.
+         * @type {string}
+         */
         const schemaSQL = fs.readFileSync(schemaPath, 'utf8');
-        //3. Execute the SQL commands
+
+        // Execute batch DDL/DML commands against the PostgreSQL pool
         await pool.query(schemaSQL);
         console.log('[Migration] Database migrations completed successfully.'); 
-    }
-    catch(err){
+    } catch (err) {
         console.error(`[Migration Error] Failed to run migrations: ${err.message}`);
-    }
-    finally{
-        //4. Close the database connection pool
+    } finally {
+        // Guarantee disposal of pool connections to prevent hanging process lifecycle
         await pool.end();
         console.log('[Migration] Database connection pool closed.');
-
     }
 };
+
 runMigrations();
