@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "test": "node --test \"test/**/*.test.js\"",
     "db:migrate": "node src/database/migrate.js"
   },
   "dependencies": {
@@ -13,5 +15,11 @@
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.22.0"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "supertest": "^7.3.1"
   }
 }
