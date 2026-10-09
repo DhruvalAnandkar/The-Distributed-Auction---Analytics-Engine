@@ -275,6 +275,37 @@ Start the API Gateway in development mode.
 npm run api:dev
 ```
 
+Run the test suite (no database required — tests inject a fake pg pool):
+
+```bash
+npm test
+```
+
+---
+
+# 🤖 Autonomous Engineering Agent
+
+A nightly GitHub Action (`.github/workflows/autonomous-engineer.yml`) works through the backlog in [`TASKS.json`](TASKS.json). Each run implements one feature, with tests.
+
+```
+TASKS.json ─▶ pick next task ─▶ LLM proposes full change set (code + new tests)
+                                     │
+             ┌───────────────────────┘
+             ▼
+  guardrails: path allow-list · protected files · existing tests read-only
+              · import resolution (no hallucinated packages)
+             ▼
+  apply ─▶ node --check ─▶ full test suite (must pass AND add tests)
+             │ fail: revert + feed errors back to the model (max 3 attempts)
+             ▼ pass
+  mark task done ─▶ commit on agent/<task> ─▶ pull request (auto-merge optional)
+```
+
+- The agent logic lives in `scripts/agent/` and has its own unit tests.
+- The model follows the house rules in [`docs/agent/CONVENTIONS.md`](docs/agent/CONVENTIONS.md).
+- Nothing reaches `main` unless the whole suite is green.
+- Run a specific task: **Actions → Autonomous Engineer → Run workflow → task_id**.
+
 ---
 
 # 🔌 API Documentation
@@ -319,7 +350,7 @@ Returns the operational status of the API Gateway.
 - 🔄 Event Queues
 - 🔄 Docker Support
 - 🔄 Kubernetes Deployment
-- 🔄 CI/CD Pipeline
+- ✅ CI Pipeline + autonomous engineering agent
 - 🔄 Distributed Load Testing
 
 ---
