@@ -19,7 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { createModel, parseModelJson, ModelUnavailableError } from './llm.mjs';
+import { createModel, parseModelJson, ModelUnavailableError, resolveModelList } from './llm.mjs';
 import {
   validateProposal,
   checkImports,
@@ -363,7 +363,7 @@ async function main() {
 
   const model = createModel({
     apiKey: process.env.GEMINI_API_KEY,
-    modelName: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
+    modelNames: resolveModelList(process.env.GEMINI_MODEL),
     fixtureDir: process.env.AGENT_FIXTURE_DIR,
   });
 

@@ -1,7 +1,8 @@
 /**
  * @fileoverview Model access for the agent.
  *
- * - Gemini (default): JSON-mode generation with exponential backoff on 429/5xx.
+ * - Gemini (default): JSON-mode generation, backoff on 429/5xx, and automatic
+ *   fail-over across free-tier models when one is overloaded or out of quota.
  * - Fixture mode (AGENT_FIXTURE_DIR): replays attempt-1.json, attempt-2.json, ...
  *   so the whole pipeline can be exercised offline and in tests.
  */
@@ -9,7 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const MAX_RETRIES = 5;
+const MAX_RETRIES_PER_MODEL = 2; // then fail over to the next model
 const INITIAL_BACKOFF_MS = 2000;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -40,7 +41,56 @@ export function retryDelayMs(error, fallbackMs) {
 
 export class ModelUnavailableError extends Error {}
 
-export function createModel({ apiKey, modelName, fixtureDir }) {
+/**
+ * Free-tier models tried in order after the preferred one. When a model is
+ * overloaded (503), missing (404) or out of daily quota, the agent moves on to
+ * the next one instead of failing the night.
+ */
+export const DEFAULT_FALLBACK_MODELS = [
+  'gemini-3.8-flash',
+  'gemini-3.7-flash',
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+];
+
+/** "a, b,,a" -> ['a', 'b']; preferred models first, defaults appended, no duplicates. */
+export function resolveModelList(preferred, defaults = DEFAULT_FALLBACK_MODELS) {
+  const fromEnv = String(preferred || '')
+    .split(',')
+    .map((m) => m.trim())
+    .filter((m) => /^[a-z0-9][a-z0-9.\-]{2,63}$/i.test(m));
+  return [...new Set([...fromEnv, ...defaults])];
+}
+
+const REQUEST_TIMEOUT_MS = 180_000;
+
+async function callGemini(apiKey, modelName, prompt) {
+  const { GoogleGenerativeAI } = await import('@google/generative-ai');
+  const model = new GoogleGenerativeAI(apiKey).getGenerativeModel(
+    { model: modelName, generationConfig: { responseMimeType: 'application/json', temperature: 0.2 } },
+    { timeout: REQUEST_TIMEOUT_MS }
+  );
+  const result = await model.generateContent(prompt);
+  return result.response.text();
+}
+
+/**
+ * @param {Object} opts
+ * @param {string} [opts.apiKey]
+ * @param {string[]} [opts.modelNames] - tried in order; the first that works is reused.
+ * @param {string} [opts.fixtureDir] - offline replay mode
+ * @param {Function} [opts.callModel] - (modelName, prompt) => text; injectable for tests
+ * @param {number} [opts.maxRetries] - retries per model for transient errors
+ * @param {Function} [opts.sleepFn]
+ */
+export function createModel({
+  apiKey,
+  modelNames = DEFAULT_FALLBACK_MODELS,
+  fixtureDir,
+  callModel,
+  maxRetries = MAX_RETRIES_PER_MODEL,
+  sleepFn = sleep,
+}) {
   if (fixtureDir) {
     let call = 0;
     return {
@@ -54,35 +104,47 @@ export function createModel({ apiKey, modelName, fixtureDir }) {
     };
   }
 
-  if (!apiKey) throw new ModelUnavailableError('GEMINI_API_KEY is not set.');
+  if (!callModel && !apiKey) throw new ModelUnavailableError('GEMINI_API_KEY is not set.');
+  if (!modelNames.length) throw new ModelUnavailableError('No Gemini models configured.');
+  const call = callModel || ((name, prompt) => callGemini(apiKey, name, prompt));
+
+  let current = 0; // sticky: once a model works, later attempts start from it
+
+  async function tryModel(name, prompt) {
+    let delay = INITIAL_BACKOFF_MS;
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await call(name, prompt);
+      } catch (error) {
+        const msg = String((error && error.message) || error).slice(0, 300);
+        if (isDailyQuotaError(error)) throw new ModelUnavailableError(`${name}: daily quota exhausted`);
+        if (!isRetryable(error) || attempt >= maxRetries) throw new ModelUnavailableError(`${name}: ${msg}`);
+        const wait = retryDelayMs(error, delay);
+        console.warn(`[agent] ${name} busy/rate-limited; retry ${attempt + 1}/${maxRetries} in ${wait}ms`);
+        await sleepFn(wait);
+        delay = Math.min(delay * 2, MAX_BACKOFF_MS);
+      }
+    }
+  }
 
   return {
-    name: modelName,
+    get name() {
+      return modelNames[current];
+    },
     async generate(prompt) {
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const model = new GoogleGenerativeAI(apiKey).getGenerativeModel({
-        model: modelName,
-        generationConfig: { responseMimeType: 'application/json', temperature: 0.2 },
-      });
-
-      let delay = INITIAL_BACKOFF_MS;
-      for (let attempt = 0; ; attempt += 1) {
+      const failures = [];
+      for (let i = current; i < modelNames.length; i += 1) {
         try {
-          const result = await model.generateContent(prompt);
-          return result.response.text();
+          const text = await tryModel(modelNames[i], prompt);
+          if (i !== current) console.warn(`[agent] switched to fallback model ${modelNames[i]}`);
+          current = i;
+          return text;
         } catch (error) {
-          if (isDailyQuotaError(error)) {
-            throw new ModelUnavailableError('Gemini daily free-tier quota exhausted; will try again next run.');
-          }
-          if (!isRetryable(error) || attempt >= MAX_RETRIES) {
-            throw new ModelUnavailableError(`Gemini call failed: ${String(error.message).slice(0, 300)}`);
-          }
-          const wait = retryDelayMs(error, delay);
-          console.warn(`[agent] Gemini busy/rate-limited; retry ${attempt + 1}/${MAX_RETRIES} in ${wait}ms`);
-          await sleep(wait);
-          delay = Math.min(delay * 2, MAX_BACKOFF_MS);
+          failures.push(error.message);
+          console.warn(`[agent] model unavailable -> ${error.message}`);
         }
       }
+      throw new ModelUnavailableError(`All Gemini models failed: ${failures.join(' | ')}`);
     },
   };
 }
