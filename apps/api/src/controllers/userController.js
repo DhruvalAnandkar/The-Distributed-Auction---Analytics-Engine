@@ -26,8 +26,9 @@ export function createUserController({ db }) {
    *
    * @param {import('express').Request<{}, {}, UserRegistrationPayload>} req
    * @param {import('express').Response} res
+   * @param {import('express').NextFunction} next
    */
-  const registerUser = async (req, res) => {
+  const registerUser = async (req, res, next) => {
     const { username, email, password } = req.body;
 
     try {
@@ -55,11 +56,7 @@ export function createUserController({ db }) {
         user: newUser.rows[0],
       });
     } catch (err) {
-      console.error(`[Register User Error] ${err.message}`);
-      return res.status(500).json({
-        error: 'Internal server error',
-        message: err.message || 'An unexpected error occurred',
-      });
+      next(err);
     }
   };
 
