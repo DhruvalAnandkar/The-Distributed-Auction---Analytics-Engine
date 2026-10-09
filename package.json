@@ -8,9 +8,16 @@
         "packages/*"
     ],
     "scripts": {
-        "api-dev": "npm run dev --workspace=apps/api"
+        "api-dev": "npm run dev --workspace=apps/api",
+        "api:dev": "npm run dev --workspace=apps/api",
+        "test": "npm test --workspace=apps/api && npm run test:agent",
+        "test:agent": "node --test \"scripts/agent/**/*.test.mjs\"",
+        "agent": "node scripts/agent/run.mjs"
     },
     "dependencies": {
         "@google/generative-ai": "^0.24.1"
+    },
+    "engines": {
+        "node": ">=22"
     }
 }
