@@ -1,0 +1,112 @@
+name: Autonomous Engineer
+
+# Implements ONE task from TASKS.json per run, verifies it against the full test
+# suite, and opens a pull request. Nothing reaches main without passing tests.
+#
+# Security model:
+# - Model-written code only ever runs inside `node scripts/agent/run.mjs`, whose
+#   test runner gets an allow-listed environment (no API keys, no tokens).
+# - The checkout does NOT persist git credentials, so code run during the agent
+#   step cannot push. Credentials are added only in the later publish step.
+# - Only the files listed in .agent-out/files.txt are committed.
+# - Third-party actions are pinned to full commit SHAs.
+
+on:
+  schedule:
+    - cron: '30 23 * * *' # 7:30 PM US Eastern (daylight time)
+  workflow_dispatch:
+    inputs:
+      task_id:
+        description: 'Run a specific task id from TASKS.json (blank = next pending)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: autonomous-engineer
+  cancel-in-progress: false
+
+jobs:
+  engineer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      # Repo variable AUTO_MERGE=false -> agent PRs wait for your review.
+      AUTO_MERGE: ${{ vars.AUTO_MERGE || 'true' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run agent
+        id: agent
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          TASK_ID: ${{ inputs.task_id }}
+        run: node scripts/agent/run.mjs
+
+      - name: Configure git
+        if: steps.agent.outputs.status == 'success' || steps.agent.outputs.status == 'failed'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "DhruvalAnandkar"
+          git config user.email "dhruvalabroad@gmail.com"
+          gh auth setup-git
+
+      - name: Open pull request
+        if: steps.agent.outputs.status == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ steps.agent.outputs.branch }}
+          TITLE: ${{ steps.agent.outputs.title }}
+        run: |
+          git switch -c "$BRANCH"
+          git add --pathspec-from-file=.agent-out/files.txt
+          git commit -F .agent-out/commit-message.txt
+          git push --force origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" --title "$TITLE" --body-file .agent-out/pr-body.md
+          if [ "$AUTO_MERGE" = "true" ]; then
+            gh pr merge "$BRANCH" --squash --delete-branch
+          fi
+
+      - name: Record failed attempt
+        if: steps.agent.outputs.status == 'failed'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TASK_ID: ${{ steps.agent.outputs.task_id }}
+        run: |
+          git add TASKS.json
+          git commit -m "chore(agent): record failed attempt on ${TASK_ID}"
+          git push origin HEAD:main
+
+      - name: Upload agent report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: agent-report
+          path: .agent-out/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Fail the run if the agent could not finish
+        if: steps.agent.outputs.status == 'failed'
+        run: |
+          cat .agent-out/failure.md
+          exit 1
