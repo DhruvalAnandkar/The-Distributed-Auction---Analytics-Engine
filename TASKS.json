@@ -11,9 +11,22 @@
         "Unexpected errors return 500 { error: 'Internal server error' } and do NOT include the original error message",
         "Malformed JSON bodies return 400 instead of 500"
       ],
-      "scope": ["apps/api/src/**", "apps/api/test/**"],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
       "dependsOn": [],
-      "status": "pending"
+      "status": "done",
+      "completedAt": "2026-10-09T03:09:19.696Z",
+      "attempts": 1,
+      "files": [
+        "apps/api/src/utils/AppError.js",
+        "apps/api/src/middleware/errorHandler.js",
+        "apps/api/src/middleware/notFound.js",
+        "apps/api/src/app.js",
+        "apps/api/src/controllers/userController.js",
+        "apps/api/test/errorHandling.test.js"
+      ]
     },
     {
       "id": "register-validation",
@@ -25,9 +38,16 @@
         "Email is lowercased before the uniqueness check and insert",
         "Valid payloads still register successfully"
       ],
-      "scope": ["apps/api/src/**", "apps/api/test/**"],
-      "dependencies": ["zod"],
-      "dependsOn": ["error-handling"],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependencies": [
+        "zod"
+      ],
+      "dependsOn": [
+        "error-handling"
+      ],
       "status": "pending"
     },
     {
@@ -40,8 +60,13 @@
         "Token verifies with JWT_SECRET and has sub, username and exp claims",
         "Missing JWT_SECRET causes a 500, never an unsigned or default-secret token"
       ],
-      "scope": ["apps/api/src/**", "apps/api/test/**"],
-      "dependsOn": ["register-validation"],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [
+        "register-validation"
+      ],
       "status": "pending"
     },
     {
@@ -53,8 +78,13 @@
         "Valid token sets req.user and /me returns { user } from the DB",
         "/me returns 404 if the user no longer exists"
       ],
-      "scope": ["apps/api/src/**", "apps/api/test/**"],
-      "dependsOn": ["auth-login"],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [
+        "auth-login"
+      ],
       "status": "pending"
     },
     {
@@ -66,8 +96,13 @@
         "401 without a token, 400 with field details on invalid input",
         "INSERT is parameterized and uses the authenticated user as seller"
       ],
-      "scope": ["apps/api/src/**", "apps/api/test/**"],
-      "dependsOn": ["auth-middleware"],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [
+        "auth-middleware"
+      ],
       "status": "pending"
     },
     {
@@ -80,8 +115,13 @@
         "Unknown or non-numeric id returns 404 / 400 respectively",
         "Pagination uses WHERE id < $cursor, not OFFSET"
       ],
-      "scope": ["apps/api/src/**", "apps/api/test/**"],
-      "dependsOn": ["auction-create"],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [
+        "auction-create"
+      ],
       "status": "pending"
     },
     {
@@ -94,8 +134,13 @@
         "Correct status codes for closed auction, own auction, too-low bid, unknown auction",
         "201 { bid, auction: { currentPrice } } on success"
       ],
-      "scope": ["apps/api/src/**", "apps/api/test/**"],
-      "dependsOn": ["auction-read"],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [
+        "auction-read"
+      ],
       "status": "pending"
     },
     {
@@ -106,8 +151,13 @@
         "Returns { bids, highestBid } with no user emails or hashes",
         "404 for unknown auction, 400 for invalid id/limit"
       ],
-      "scope": ["apps/api/src/**", "apps/api/test/**"],
-      "dependsOn": ["bids-place"],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [
+        "bids-place"
+      ],
       "status": "pending"
     },
     {
@@ -120,8 +170,13 @@
         "Buckets are independent per key",
         "Stale buckets are evicted so memory does not grow unbounded"
       ],
-      "scope": ["apps/api/src/**", "apps/api/test/**"],
-      "dependsOn": ["bids-place"],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [
+        "bids-place"
+      ],
       "status": "pending"
     },
     {
@@ -134,8 +189,13 @@
         "One JSON log line per request with the documented fields",
         "500 responses include requestId"
       ],
-      "scope": ["apps/api/src/**", "apps/api/test/**"],
-      "dependsOn": ["error-handling"],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [
+        "error-handling"
+      ],
       "status": "pending"
     },
     {
@@ -148,8 +208,13 @@
         "Admin endpoint returns 401 for missing/wrong token, uses timingSafeEqual",
         "Transaction is rolled back on error"
       ],
-      "scope": ["apps/api/src/**", "apps/api/test/**"],
-      "dependsOn": ["bids-history"],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [
+        "bids-history"
+      ],
       "status": "pending"
     },
     {
@@ -161,7 +226,10 @@
         "A DB call that never resolves yields 503 within ~1s and leaves no dangling timer",
         "Existing /health behavior unchanged"
       ],
-      "scope": ["apps/api/src/**", "apps/api/test/**"],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
       "dependsOn": [],
       "status": "pending"
     }

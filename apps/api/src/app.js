@@ -9,6 +9,8 @@
 import express from 'express';
 import defaultPool from './config/db.js';
 import { createUserRouter } from './routes/userRoutes.js';
+import { notFound } from './middleware/notFound.js';
+import { errorHandler } from './middleware/errorHandler.js';
 
 /**
  * Builds the Express application.
@@ -45,14 +47,11 @@ export function createApp({ db = defaultPool } = {}) {
     });
   });
 
-  // eslint-disable-next-line no-unused-vars
-  app.use((err, req, res, next) => {
-    console.error(`[Server Error] ${err.message}`);
-    res.status(500).json({
-      error: 'Internal server error',
-      message: err.message || 'An unexpected error occurred',
-    });
-  });
+  // Unknown routes handler
+  app.use(notFound);
+
+  // Centralized error handler
+  app.use(errorHandler);
 
   return app;
 }
