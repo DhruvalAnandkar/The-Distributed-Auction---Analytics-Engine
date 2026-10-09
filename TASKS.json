@@ -1,0 +1,169 @@
+{
+  "description": "Engineering backlog worked by the autonomous agent (scripts/agent/run.mjs), one task per run. Statuses: pending | done | blocked. Add tasks freely; the agent picks the first pending task whose dependsOn are all done.",
+  "tasks": [
+    {
+      "id": "error-handling",
+      "title": "Centralized error handling with AppError and 404 handler",
+      "description": "Introduce an AppError class (status, message, optional details) in src/utils/AppError.js and a central error middleware in src/middleware/errorHandler.js. Add a notFound middleware for unknown routes. Wire both in createApp, replacing the inline error handler. Unexpected errors must return a generic 500 without leaking err.message.",
+      "acceptanceCriteria": [
+        "Unknown routes return 404 { error: 'Not found' }",
+        "Thrown AppError(409, 'x') returns 409 { error: 'x' } (and details when provided)",
+        "Unexpected errors return 500 { error: 'Internal server error' } and do NOT include the original error message",
+        "Malformed JSON bodies return 400 instead of 500"
+      ],
+      "scope": ["apps/api/src/**", "apps/api/test/**"],
+      "dependsOn": [],
+      "status": "pending"
+    },
+    {
+      "id": "register-validation",
+      "title": "Validate registration input with zod",
+      "description": "Add a reusable validate(schema) middleware (src/middleware/validate.js) and a registration schema (src/validators/userValidators.js). Username 3-50 chars [a-zA-Z0-9_], valid email (normalized to lowercase), password 8-128 chars with at least one letter and one number. Apply to POST /api/users/register.",
+      "acceptanceCriteria": [
+        "Invalid payloads return 400 { error: 'Validation failed', details: [{ field, message }] }",
+        "No database query is issued for invalid payloads",
+        "Email is lowercased before the uniqueness check and insert",
+        "Valid payloads still register successfully"
+      ],
+      "scope": ["apps/api/src/**", "apps/api/test/**"],
+      "dependencies": ["zod"],
+      "dependsOn": ["error-handling"],
+      "status": "pending"
+    },
+    {
+      "id": "auth-login",
+      "title": "JWT login endpoint",
+      "description": "Add POST /api/users/login accepting { email, password }. Verify with bcrypt, issue an HS256 JWT (sub = user id, username claim, 1h expiry) signed with process.env.JWT_SECRET. Put token logic in src/services/tokenService.js. Validate input with the existing validate middleware.",
+      "acceptanceCriteria": [
+        "Correct credentials return 200 { token, user } without the password hash",
+        "Wrong password and unknown email both return 401 with the same generic message (no user enumeration)",
+        "Token verifies with JWT_SECRET and has sub, username and exp claims",
+        "Missing JWT_SECRET causes a 500, never an unsigned or default-secret token"
+      ],
+      "scope": ["apps/api/src/**", "apps/api/test/**"],
+      "dependsOn": ["register-validation"],
+      "status": "pending"
+    },
+    {
+      "id": "auth-middleware",
+      "title": "requireAuth middleware and GET /api/users/me",
+      "description": "Add src/middleware/requireAuth.js that verifies 'Authorization: Bearer <jwt>' using tokenService and sets req.user = { id, username }. Add GET /api/users/me returning the current user from the database.",
+      "acceptanceCriteria": [
+        "Missing, malformed, expired or wrongly-signed tokens return 401",
+        "Valid token sets req.user and /me returns { user } from the DB",
+        "/me returns 404 if the user no longer exists"
+      ],
+      "scope": ["apps/api/src/**", "apps/api/test/**"],
+      "dependsOn": ["auth-login"],
+      "status": "pending"
+    },
+    {
+      "id": "auction-create",
+      "title": "Create auctions (POST /api/auctions)",
+      "description": "Add an auctions router/controller. POST /api/auctions (requireAuth) with { title, description?, startPrice, endsAt }. Validate: title 3-100 chars, startPrice > 0 with max 2 decimals, endsAt ISO date at least 1 minute in the future. Insert with seller_id = req.user.id, current_price = start_price, status 'ACTIVE'. Mount at /api/auctions.",
+      "acceptanceCriteria": [
+        "201 { auction } with camelCase fields on success",
+        "401 without a token, 400 with field details on invalid input",
+        "INSERT is parameterized and uses the authenticated user as seller"
+      ],
+      "scope": ["apps/api/src/**", "apps/api/test/**"],
+      "dependsOn": ["auth-middleware"],
+      "status": "pending"
+    },
+    {
+      "id": "auction-read",
+      "title": "List and fetch auctions with pagination",
+      "description": "GET /api/auctions with ?status=ACTIVE|PENDING|CLOSED, ?limit (1-100, default 20) and ?cursor (id-based keyset pagination, ordered by id DESC). GET /api/auctions/:id returns one auction. Both public.",
+      "acceptanceCriteria": [
+        "List returns { auctions, pagination: { nextCursor } } and nextCursor is null on the last page",
+        "Invalid status/limit/cursor returns 400",
+        "Unknown or non-numeric id returns 404 / 400 respectively",
+        "Pagination uses WHERE id < $cursor, not OFFSET"
+      ],
+      "scope": ["apps/api/src/**", "apps/api/test/**"],
+      "dependsOn": ["auction-create"],
+      "status": "pending"
+    },
+    {
+      "id": "bids-place",
+      "title": "Place bids with row-level locking",
+      "description": "Add a bids table to schema.sql (id, auction_id FK, bidder_id FK, amount NUMERIC(12,2), created_at; index on (auction_id, amount DESC)). POST /api/auctions/:id/bids (requireAuth) { amount }. In ONE transaction: SELECT the auction FOR UPDATE, reject if not ACTIVE or ends_at passed (409), reject seller bidding on own auction (403), require amount >= current_price + minimum increment (max(1.00, 5% of current_price)) else 409, insert bid, update current_price, COMMIT. ROLLBACK on any error and always release the client.",
+      "acceptanceCriteria": [
+        "Uses db.connect(), BEGIN, SELECT ... FOR UPDATE, COMMIT; ROLLBACK on every failure path",
+        "Client is released on success and on failure",
+        "Correct status codes for closed auction, own auction, too-low bid, unknown auction",
+        "201 { bid, auction: { currentPrice } } on success"
+      ],
+      "scope": ["apps/api/src/**", "apps/api/test/**"],
+      "dependsOn": ["auction-read"],
+      "status": "pending"
+    },
+    {
+      "id": "bids-history",
+      "title": "Bid history endpoint",
+      "description": "GET /api/auctions/:id/bids returning bids newest first with bidder username (JOIN users), limit 1-100 default 50, plus the current highest bid.",
+      "acceptanceCriteria": [
+        "Returns { bids, highestBid } with no user emails or hashes",
+        "404 for unknown auction, 400 for invalid id/limit"
+      ],
+      "scope": ["apps/api/src/**", "apps/api/test/**"],
+      "dependsOn": ["bids-place"],
+      "status": "pending"
+    },
+    {
+      "id": "rate-limit",
+      "title": "Token-bucket rate limiter for auth and bidding",
+      "description": "Implement an in-memory token bucket in src/middleware/rateLimit.js (no dependencies): createRateLimiter({ capacity, refillPerSecond, key: req => string, now?: () => ms }). Apply to POST /login (by IP) and POST bids (by user id). Inject `now` so tests are deterministic without sleeping.",
+      "acceptanceCriteria": [
+        "Requests beyond capacity get 429 with a Retry-After header",
+        "Tokens refill over time (tested via injected clock)",
+        "Buckets are independent per key",
+        "Stale buckets are evicted so memory does not grow unbounded"
+      ],
+      "scope": ["apps/api/src/**", "apps/api/test/**"],
+      "dependsOn": ["bids-place"],
+      "status": "pending"
+    },
+    {
+      "id": "request-context",
+      "title": "Request IDs and structured access logs",
+      "description": "Middleware that assigns each request an id (honor an incoming X-Request-Id if it is a safe <=64 char token, else crypto.randomUUID()), echoes it in the X-Request-Id response header, and logs one JSON line per request on finish: { requestId, method, path, status, durationMs }. Include requestId in 500 error responses.",
+      "acceptanceCriteria": [
+        "Every response has X-Request-Id",
+        "Unsafe incoming ids are replaced",
+        "One JSON log line per request with the documented fields",
+        "500 responses include requestId"
+      ],
+      "scope": ["apps/api/src/**", "apps/api/test/**"],
+      "dependsOn": ["error-handling"],
+      "status": "pending"
+    },
+    {
+      "id": "auction-close",
+      "title": "Close expired auctions",
+      "description": "Add src/services/auctionCloser.js exporting closeExpiredAuctions({ db, now }) that, in a transaction, marks ACTIVE auctions with ends_at <= now as CLOSED and returns [{ auctionId, winnerId, winningAmount }] using the highest bid (or null winner). Add POST /api/admin/auctions/close-expired protected by an X-Admin-Token header compared with crypto.timingSafeEqual against process.env.ADMIN_TOKEN.",
+      "acceptanceCriteria": [
+        "Only ACTIVE + expired auctions are closed (verified via SQL params)",
+        "Winner is the highest bidder; auctions without bids close with winnerId null",
+        "Admin endpoint returns 401 for missing/wrong token, uses timingSafeEqual",
+        "Transaction is rolled back on error"
+      ],
+      "scope": ["apps/api/src/**", "apps/api/test/**"],
+      "dependsOn": ["bids-history"],
+      "status": "pending"
+    },
+    {
+      "id": "readiness",
+      "title": "Liveness vs readiness probes",
+      "description": "Keep GET /health as liveness. Add GET /health/ready that returns 200 when SELECT 1 succeeds within 1 second and 503 otherwise (use Promise.race with a timer that is cleared). Kubernetes-style.",
+      "acceptanceCriteria": [
+        "/health/ready returns 200 when the DB responds and 503 when it errors",
+        "A DB call that never resolves yields 503 within ~1s and leaves no dangling timer",
+        "Existing /health behavior unchanged"
+      ],
+      "scope": ["apps/api/src/**", "apps/api/test/**"],
+      "dependsOn": [],
+      "status": "pending"
+    }
+  ]
+}
