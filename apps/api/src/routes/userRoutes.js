@@ -1,9 +1,21 @@
 import express from 'express';
-import { registerUser } from '../controllers/userController.js';
+import { createUserController } from '../controllers/userController.js';
 
-const router = express.Router();
+/**
+ * Builds the /api/users router.
+ *
+ * @param {Object} deps
+ * @param {{ query: Function }} deps.db - node-postgres compatible query interface.
+ * @returns {import('express').Router}
+ */
+export function createUserRouter({ db }) {
+  const router = express.Router();
+  const users = createUserController({ db });
 
-//POST /api/users/register
-router.post('/register', registerUser);
+  // POST /api/users/register
+  router.post('/register', users.registerUser);
 
-export default router;
+  return router;
+}
+
+export default createUserRouter;
