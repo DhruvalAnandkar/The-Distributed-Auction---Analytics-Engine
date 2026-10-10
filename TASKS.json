@@ -48,7 +48,15 @@
       "dependsOn": [
         "error-handling"
       ],
-      "status": "pending"
+      "status": "done",
+      "completedAt": "2026-10-10T02:43:38.704Z",
+      "attempts": 1,
+      "files": [
+        "apps/api/src/middleware/validate.js",
+        "apps/api/src/validators/userValidators.js",
+        "apps/api/src/routes/userRoutes.js",
+        "apps/api/test/users.validation.test.js"
+      ]
     },
     {
       "id": "auth-login",
