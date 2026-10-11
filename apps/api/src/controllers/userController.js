@@ -1,10 +1,17 @@
 import bcrypt from 'bcryptjs';
+import { generateToken } from '../services/tokenService.js';
 
 /**
  * @typedef {Object} UserRegistrationPayload
  * @property {string} username - Desired unique username.
  * @property {string} email - Unique email address of the user.
  * @property {string} password - Raw, unhashed user password.
+ */
+
+/**
+ * @typedef {Object} UserLoginPayload
+ * @property {string} email - User email address.
+ * @property {string} password - Raw user password.
  */
 
 /**
@@ -60,7 +67,49 @@ export function createUserController({ db }) {
     }
   };
 
-  return { registerUser };
+  /**
+   * POST /api/users/login
+   *
+   * Verifies user credentials, generates an HS256 JWT, and returns
+   * the token along with the user profile (omitting password hash).
+   *
+   * @param {import('express').Request<{}, {}, UserLoginPayload>} req
+   * @param {import('express').Response} res
+   * @param {import('express').NextFunction} next
+   */
+  const loginUser = async (req, res, next) => {
+    const { email, password } = req.body;
+
+    try {
+      const result = await db.query(
+        'SELECT id, username, email, password, created_at FROM users WHERE email = $1',
+        [email]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+
+      const user = result.rows[0];
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+
+      if (!isPasswordValid) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+
+      const token = generateToken(user);
+      const { password: _, ...userWithoutPassword } = user;
+
+      return res.status(200).json({
+        token,
+        user: userWithoutPassword,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  return { registerUser, loginUser };
 }
 
 export default createUserController;

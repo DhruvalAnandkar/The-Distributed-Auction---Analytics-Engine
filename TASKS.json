@@ -75,7 +75,16 @@
       "dependsOn": [
         "register-validation"
       ],
-      "status": "pending"
+      "status": "done",
+      "completedAt": "2026-10-11T02:06:57.266Z",
+      "attempts": 1,
+      "files": [
+        "apps/api/src/services/tokenService.js",
+        "apps/api/src/validators/userValidators.js",
+        "apps/api/src/controllers/userController.js",
+        "apps/api/src/routes/userRoutes.js",
+        "apps/api/test/users.login.test.js"
+      ]
     },
     {
       "id": "auth-middleware",

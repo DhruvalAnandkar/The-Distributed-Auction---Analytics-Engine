@@ -1,7 +1,7 @@
 import express from 'express';
 import { createUserController } from '../controllers/userController.js';
 import { validate } from '../middleware/validate.js';
-import { registerSchema } from '../validators/userValidators.js';
+import { registerSchema, loginSchema } from '../validators/userValidators.js';
 
 /**
  * Builds the /api/users router.
@@ -16,6 +16,9 @@ export function createUserRouter({ db }) {
 
   // POST /api/users/register
   router.post('/register', validate(registerSchema), users.registerUser);
+
+  // POST /api/users/login
+  router.post('/login', validate(loginSchema), users.loginUser);
 
   return router;
 }
