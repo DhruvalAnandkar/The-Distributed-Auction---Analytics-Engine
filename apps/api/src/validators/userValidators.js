@@ -21,3 +21,16 @@ export const registerSchema = z.object({
       message: 'Password must contain at least one letter and one number',
     }),
 });
+
+/**
+ * Zod schema for validating user login payloads.
+ */
+export const loginSchema = z.object({
+  email: z
+    .string({ required_error: 'Email is required' })
+    .email('Invalid email address')
+    .toLowerCase(),
+  password: z
+    .string({ required_error: 'Password is required' })
+    .min(1, 'Password is required'),
+});
