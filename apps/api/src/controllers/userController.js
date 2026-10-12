@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { generateToken } from '../services/tokenService.js';
+import AppError from '../utils/AppError.js';
 
 /**
  * @typedef {Object} UserRegistrationPayload
@@ -109,7 +110,36 @@ export function createUserController({ db }) {
     }
   };
 
-  return { registerUser, loginUser };
+  /**
+   * GET /api/users/me
+   *
+   * Retrieves the currently authenticated user from the database using req.user.id.
+   *
+   * @param {import('express').Request} req
+   * @param {import('express').Response} res
+   * @param {import('express').NextFunction} next
+   */
+  const getCurrentUser = async (req, res, next) => {
+    try {
+      const userId = req.user.id;
+      const result = await db.query(
+        'SELECT id, username, email, created_at FROM users WHERE id = $1',
+        [userId]
+      );
+
+      if (result.rows.length === 0) {
+        return next(new AppError(404, 'User not found'));
+      }
+
+      return res.status(200).json({
+        user: result.rows[0],
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  return { registerUser, loginUser, getCurrentUser };
 }
 
 export default createUserController;

@@ -102,7 +102,15 @@
       "dependsOn": [
         "auth-login"
       ],
-      "status": "pending"
+      "status": "done",
+      "completedAt": "2026-10-12T02:39:32.246Z",
+      "attempts": 1,
+      "files": [
+        "apps/api/src/middleware/requireAuth.js",
+        "apps/api/src/controllers/userController.js",
+        "apps/api/src/routes/userRoutes.js",
+        "apps/api/test/users.me.test.js"
+      ]
     },
     {
       "id": "auction-create",
