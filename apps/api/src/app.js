@@ -1,14 +1,7 @@
-/**
- * @fileoverview Express application factory for the API Gateway.
- *
- * The app is built by a factory instead of at import time so that tests (and the
- * autonomous agent's verification step) can create an app with a fake database
- * and drive it with supertest, without opening a port or a Postgres connection.
- */
-
 import express from 'express';
 import defaultPool from './config/db.js';
 import { createUserRouter } from './routes/userRoutes.js';
+import { createAuctionRouter } from './routes/auctionRoutes.js';
 import { notFound } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
@@ -26,6 +19,7 @@ export function createApp({ db = defaultPool } = {}) {
   app.use(express.json());
 
   app.use('/api/users', createUserRouter({ db }));
+  app.use('/api/auctions', createAuctionRouter({ db }));
 
   app.get('/health', async (req, res) => {
     let dbStatus = 'DOWN';

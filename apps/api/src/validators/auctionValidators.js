@@ -1,0 +1,37 @@
+import { z } from 'zod';
+
+/**
+ * Zod schema for validating auction creation payloads.
+ */
+export const createAuctionSchema = z.object({
+  title: z
+    .string({ required_error: 'Title is required' })
+    .min(3, 'Title must be between 3 and 100 characters')
+    .max(100, 'Title must be between 3 and 100 characters'),
+  description: z.string().optional(),
+  startPrice: z
+    .number({ required_error: 'Start price is required' })
+    .positive('Start price must be greater than 0')
+    .refine(
+      (val) => {
+        const decimalPart = val.toString().split('.')[1];
+        return !decimalPart || decimalPart.length <= 2;
+      },
+      { message: 'Start price can have at most 2 decimal places' }
+    ),
+  endsAt: z
+    .string({ required_error: 'Ends at date is required' }),
+}).refine(
+  (data) => {
+    const endsAtDate = new Date(data.endsAt);
+    if (Number.isNaN(endsAtDate.getTime())) {
+      return false;
+    }
+    const oneMinuteFromNow = new Date(Date.now() + 60 * 1000);
+    return endsAtDate >= oneMinuteFromNow;
+  },
+  {
+    message: 'Ends at must be an ISO date at least 1 minute in the future',
+    path: ['endsAt'],
+  }
+);
