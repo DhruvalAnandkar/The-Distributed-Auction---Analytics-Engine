@@ -53,6 +53,9 @@ export const DEFAULT_FALLBACK_MODELS = [
   'gemini-3.5-flash-lite',
 ];
 
+/** Fallback models that are fine for retries but too weak to judge a task by. */
+export const isLightweightModel = (name) => /-lite\b/i.test(String(name || ''));
+
 /** "a, b,,a" -> ['a', 'b']; preferred models first, defaults appended, no duplicates. */
 export function resolveModelList(preferred, defaults = DEFAULT_FALLBACK_MODELS) {
   const fromEnv = String(preferred || '')

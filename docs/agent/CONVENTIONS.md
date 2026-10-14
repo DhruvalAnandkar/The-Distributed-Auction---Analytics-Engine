@@ -5,6 +5,7 @@ These rules are fed verbatim to the autonomous engineering agent, and they are a
 ## Runtime
 - Node 22, ESM only (`import`/`export`, never `require`). Relative imports always include `.js`.
 - Express 5: async handlers may throw, and Express forwards rejections to the error middleware.
+- Express 5: `req.query` is a getter and cannot be reassigned (`req.query = x` throws a TypeError). Validate query strings and route params with the existing `validate(schema, 'query' | 'params')` middleware. It handles this case, and handlers then read the coerced values from `req.query` / `req.params` (also available as `req.validated`).
 - PostgreSQL via `pg`. SQL always uses parameters (`$1, $2`). Never interpolate values into SQL strings.
 
 ## Layout (apps/api)

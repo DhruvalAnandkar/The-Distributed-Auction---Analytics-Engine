@@ -157,8 +157,7 @@
         "auction-create"
       ],
       "status": "pending",
-      "attempts": 2,
-      "lastError": "Test suite failed: 5 failing of 38 tests (exit 1)."
+      "attempts": 0
     },
     {
       "id": "bids-place",

@@ -19,7 +19,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { createModel, parseModelJson, ModelUnavailableError, resolveModelList } from './llm.mjs';
+import {
+  createModel,
+  parseModelJson,
+  ModelUnavailableError,
+  resolveModelList,
+  isLightweightModel,
+} from './llm.mjs';
 import {
   validateProposal,
   checkImports,
@@ -333,7 +339,6 @@ function writeFailure({ task, history }) {
     ]),
   ].join('\n');
   fs.writeFileSync(path.join(OUT_DIR, 'failure.md'), report);
-  setOutput({ status: 'failed', task_id: task.id });
 }
 
 // ---------- main ----------
@@ -411,11 +416,22 @@ async function main() {
   if (installed.length) {
     execFileSync('git', ['checkout', '--', 'apps/api/package.json', 'package-lock.json'], { cwd: ROOT });
   }
+  writeFailure({ task, history });
+
+  // A failure from a lightweight fallback model says more about the model than
+  // the task. Don't spend one of the task's limited runs on it; the next
+  // scheduled run (or the backup run) retries when stronger models are back.
+  if (isLightweightModel(model.name)) {
+    setOutput({ status: 'deferred', task_id: task.id });
+    log(`only the lightweight model ${model.name} was available and it could not finish ${task.id}; deferring without counting a failed run`);
+    return 0;
+  }
+
   task.attempts = (task.attempts || 0) + 1;
   task.lastError = history[history.length - 1].errors[0].slice(0, 300);
   if (task.attempts >= MAX_RUN_FAILURES) task.status = 'blocked';
   fs.writeFileSync(TASKS_FILE, `${JSON.stringify(tasksDoc, null, 2)}\n`);
-  writeFailure({ task, history });
+  setOutput({ status: 'failed', task_id: task.id });
   log(`giving up on ${task.id} for this run (${task.attempts}/${MAX_RUN_FAILURES} runs failed)`);
   return 0;
 }

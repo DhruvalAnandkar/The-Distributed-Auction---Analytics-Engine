@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createModel, resolveModelList, ModelUnavailableError } from './llm.mjs';
+import { createModel, resolveModelList, ModelUnavailableError, isLightweightModel } from './llm.mjs';
 
 const overloaded = () => Object.assign(new Error('[503 Service Unavailable] This model is currently experiencing high demand.'), { status: 503 });
 const noSleep = async () => {};
@@ -116,4 +116,11 @@ test('a timed-out request moves on to the next model instead of retrying it', as
   });
   await model.generate('p');
   assert.deepEqual(calls, ['slow-model', 'good-model']);
+});
+
+test('isLightweightModel flags only -lite models', () => {
+  assert.equal(isLightweightModel('gemini-3.5-flash-lite'), true);
+  assert.equal(isLightweightModel('gemini-3.5-flash'), false);
+  assert.equal(isLightweightModel('gemini-3.8-flash'), false);
+  assert.equal(isLightweightModel(undefined), false);
 });
