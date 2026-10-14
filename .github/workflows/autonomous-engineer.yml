@@ -13,7 +13,8 @@ name: Autonomous Engineer
 
 on:
   schedule:
-    - cron: '30 23 * * *' # 7:30 PM US Eastern (daylight time)
+    - cron: '30 23 * * *' # main run: 7:30 PM US Eastern (daylight time)
+    - cron: '30 3 * * *'  # backup run: 11:30 PM Eastern, only if the main run produced nothing
   workflow_dispatch:
     inputs:
       task_id:
@@ -29,9 +30,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  engineer:
+  # Keeps output at about one PR per day: a scheduled run does nothing if an
+  # agent PR is still open or one was opened in the last 20 hours.
+  # Manual runs always proceed.
+  gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      proceed: ${{ steps.check.outputs.proceed }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != "schedule" ]; then echo "proceed=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          since=$(date -u -d '-20 hours' +%Y-%m-%dT%H:%M:%SZ)
+          recent=$(gh pr list --repo "$GITHUB_REPOSITORY" --state all --author 'app/github-actions' --limit 30 \
+            --json createdAt,state --jq "[.[] | select(.state == \"OPEN\" or .createdAt > \"$since\")] | length")
+          echo "agent PRs open or opened since $since: $recent"
+          if [ "$recent" = "0" ]; then echo "proceed=true" >> "$GITHUB_OUTPUT"; else echo "proceed=false" >> "$GITHUB_OUTPUT"; fi
+
+  engineer:
+    needs: gate
+    if: needs.gate.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
     permissions:
       contents: write
       pull-requests: write
@@ -39,13 +65,13 @@ jobs:
       # Repo variable AUTO_MERGE=false -> agent PRs wait for your review.
       AUTO_MERGE: ${{ vars.AUTO_MERGE || 'true' }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
           cache: npm
@@ -98,7 +124,7 @@ jobs:
 
       - name: Upload agent report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: agent-report
           path: .agent-out/

@@ -62,7 +62,13 @@ export function resolveModelList(preferred, defaults = DEFAULT_FALLBACK_MODELS) 
   return [...new Set([...fromEnv, ...defaults])];
 }
 
-const REQUEST_TIMEOUT_MS = 180_000;
+/**
+ * Generating complete files for a growing codebase can take several minutes on
+ * the stronger models, so a short timeout aborts answers that would have worked.
+ */
+const REQUEST_TIMEOUT_MS = Number(process.env.AGENT_REQUEST_TIMEOUT_MS || 420_000);
+const COOL_DOWN_MS = Number(process.env.AGENT_COOL_DOWN_MS || 300_000);
+const MODEL_PASSES = Number(process.env.AGENT_MODEL_PASSES || 2);
 
 async function callGemini(apiKey, modelName, prompt) {
   const { GoogleGenerativeAI } = await import('@google/generative-ai');
@@ -90,6 +96,8 @@ export function createModel({
   callModel,
   maxRetries = MAX_RETRIES_PER_MODEL,
   sleepFn = sleep,
+  passes = MODEL_PASSES,
+  coolDownMs = COOL_DOWN_MS,
 }) {
   if (fixtureDir) {
     let call = 0;
@@ -133,15 +141,24 @@ export function createModel({
     },
     async generate(prompt) {
       const failures = [];
-      for (let i = current; i < modelNames.length; i += 1) {
-        try {
-          const text = await tryModel(modelNames[i], prompt);
-          if (i !== current) console.warn(`[agent] switched to fallback model ${modelNames[i]}`);
-          current = i;
-          return text;
-        } catch (error) {
-          failures.push(error.message);
-          console.warn(`[agent] model unavailable -> ${error.message}`);
+      // Demand spikes are short-lived: if every model fails, cool down and make
+      // another full pass (from the top, since the best model may be back).
+      for (let pass = 1; pass <= passes; pass += 1) {
+        const start = pass === 1 ? current : 0;
+        for (let i = start; i < modelNames.length; i += 1) {
+          try {
+            const text = await tryModel(modelNames[i], prompt);
+            if (i !== current) console.warn(`[agent] switched to model ${modelNames[i]}`);
+            current = i;
+            return text;
+          } catch (error) {
+            failures.push(error.message);
+            console.warn(`[agent] model unavailable -> ${error.message}`);
+          }
+        }
+        if (pass < passes) {
+          console.warn(`[agent] all models unavailable; cooling down ${Math.round(coolDownMs / 1000)}s before pass ${pass + 1}/${passes}`);
+          await sleepFn(coolDownMs);
         }
       }
       throw new ModelUnavailableError(`All Gemini models failed: ${failures.join(' | ')}`);

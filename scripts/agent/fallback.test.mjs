@@ -64,6 +64,7 @@ test('reports every model when all of them fail', async (t) => {
       throw overloaded();
     },
     sleepFn: noSleep,
+    passes: 1,
   });
   await assert.rejects(model.generate('p'), (err) => {
     assert.ok(err instanceof ModelUnavailableError);
@@ -71,4 +72,48 @@ test('reports every model when all of them fail', async (t) => {
     assert.match(err.message, /b-model: .*503/);
     return true;
   });
+});
+
+test('cools down and makes a second pass when every model is overloaded', async (t) => {
+  quiet(t);
+  const calls = [];
+  const sleeps = [];
+  let busy = true;
+  const model = createModel({
+    modelNames: ['best-model', 'backup-model'],
+    callModel: async (name) => {
+      calls.push(name);
+      if (busy) throw overloaded();
+      return '{"ok":true}';
+    },
+    sleepFn: async (ms) => {
+      sleeps.push(ms);
+      if (ms === 1234) busy = false; // the spike ends during the cool-down
+    },
+    maxRetries: 0,
+    passes: 2,
+    coolDownMs: 1234,
+  });
+
+  assert.equal(await model.generate('p'), '{"ok":true}');
+  assert.deepEqual(calls, ['best-model', 'backup-model', 'best-model']);
+  assert.deepEqual(sleeps, [1234]);
+  assert.equal(model.name, 'best-model');
+});
+
+test('a timed-out request moves on to the next model instead of retrying it', async (t) => {
+  quiet(t);
+  const calls = [];
+  const model = createModel({
+    modelNames: ['slow-model', 'good-model'],
+    callModel: async (name) => {
+      calls.push(name);
+      if (name === 'slow-model') throw new Error('Request aborted when fetching ...: This operation was aborted');
+      return '{}';
+    },
+    sleepFn: noSleep,
+    passes: 1,
+  });
+  await model.generate('p');
+  assert.deepEqual(calls, ['slow-model', 'good-model']);
 });
