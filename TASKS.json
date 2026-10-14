@@ -267,6 +267,274 @@
       ],
       "dependsOn": [],
       "status": "pending"
+    },
+    {
+      "id": "security-headers",
+      "title": "Security headers middleware (no dependencies)",
+      "description": "Add src/middleware/securityHeaders.js and mount it first in createApp. Set X-Content-Type-Options: nosniff, X-Frame-Options: DENY, Referrer-Policy: no-referrer, Cross-Origin-Resource-Policy: same-origin, and a strict Content-Security-Policy (default-src 'none'; frame-ancestors 'none'). Disable Express's X-Powered-By header.",
+      "acceptanceCriteria": [
+        "Every response (including 404 and errors) carries the listed headers",
+        "X-Powered-By is absent",
+        "No new npm dependencies"
+      ],
+      "dependsOn": [],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "body-limit",
+      "title": "Request body size limit returns 413",
+      "description": "Configure express.json with a 100kb limit (overridable via createApp({ bodyLimit })). The central error handler must map body-parser's 'entity.too.large' error (err.type === 'entity.too.large' or err.status === 413) to 413 { error: 'Payload too large' }.",
+      "acceptanceCriteria": [
+        "Bodies over the limit return 413 { error: 'Payload too large' }, not 500",
+        "Bodies under the limit still work",
+        "Malformed JSON still returns 400"
+      ],
+      "dependsOn": [
+        "error-handling"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "cors",
+      "title": "CORS allow-list middleware (no dependencies)",
+      "description": "Add src/middleware/cors.js: createCors({ origins }) where origins comes from process.env.CORS_ORIGINS (comma-separated) by default. For allowed origins set Access-Control-Allow-Origin to the exact origin, Vary: Origin, and allow methods GET,POST,PATCH,DELETE,OPTIONS and headers Content-Type,Authorization. Answer preflight OPTIONS with 204. Never send '*' together with credentials.",
+      "acceptanceCriteria": [
+        "Allowed origin gets the CORS headers and Vary: Origin",
+        "Disallowed or missing origin gets no Access-Control-Allow-Origin",
+        "OPTIONS preflight from an allowed origin returns 204",
+        "Origins list is injectable for tests"
+      ],
+      "dependsOn": [],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "env-config",
+      "title": "Validated environment configuration",
+      "description": "Add src/config/env.js exporting loadConfig(env = process.env) that validates with zod: PORT (default 5001), DB_* fields, JWT_SECRET (min 32 chars outside NODE_ENV=test), CORS_ORIGINS (optional), ADMIN_TOKEN (optional). Returns a frozen typed object; throws one readable error listing every invalid variable. Do not change server startup behavior in tests.",
+      "acceptanceCriteria": [
+        "Valid env returns a frozen config with defaults applied",
+        "Invalid env throws a single error naming every bad variable",
+        "Short JWT_SECRET is rejected unless NODE_ENV=test",
+        "Secrets never appear in the error message"
+      ],
+      "dependsOn": [],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "graceful-shutdown",
+      "title": "Graceful shutdown helper",
+      "description": "Add src/utils/shutdown.js exporting createShutdown({ server, db, timeoutMs = 10000, logger = console }) that returns an idempotent async shutdown(signal): stop accepting connections (server.close), then db.end(), resolving when both finish or rejecting after timeoutMs. Wire SIGTERM/SIGINT in server.js only. Test with fake server/db objects.",
+      "acceptanceCriteria": [
+        "Calls server.close then db.end exactly once even if invoked twice",
+        "Times out with a clear error if close hangs (tested with a short timeout)",
+        "server.js registers SIGTERM and SIGINT handlers"
+      ],
+      "dependsOn": [],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "user-public-profile",
+      "title": "Public user profile endpoint",
+      "description": "GET /api/users/:id returns { user: { id, username, createdAt, auctionCount } } using a single parameterized query (LEFT JOIN or subquery on auctions). Never return email or password. Validate :id with validate(schema, 'params').",
+      "acceptanceCriteria": [
+        "Returns public fields only (no email/password)",
+        "400 for non-numeric id, 404 for unknown user",
+        "auctionCount computed in SQL"
+      ],
+      "dependsOn": [
+        "auth-middleware"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "user-update-profile",
+      "title": "Update own profile (PATCH /api/users/me)",
+      "description": "PATCH /api/users/me (requireAuth) accepts { username?, email? } (at least one), validated like registration (email lowercased). Reject if the new username/email belongs to another user (409). Return the updated user without password.",
+      "acceptanceCriteria": [
+        "401 without token, 400 for empty or invalid body",
+        "409 when username/email is taken by another user",
+        "200 { user } with updated fields; UPDATE is parameterized and scoped to req.user.id"
+      ],
+      "dependsOn": [
+        "auth-middleware"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "change-password",
+      "title": "Change password endpoint",
+      "description": "POST /api/users/me/password (requireAuth) with { currentPassword, newPassword }. Verify current password with bcrypt, enforce the registration password rules on newPassword, reject newPassword equal to current, store a new bcrypt hash (cost 10).",
+      "acceptanceCriteria": [
+        "401 without token; 401 when currentPassword is wrong",
+        "400 for weak or unchanged new password",
+        "204 on success and the stored value is a bcrypt hash of newPassword",
+        "Password hashes never appear in responses"
+      ],
+      "dependsOn": [
+        "auth-middleware"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "my-auctions",
+      "title": "List my auctions (GET /api/users/me/auctions)",
+      "description": "GET /api/users/me/auctions (requireAuth) lists auctions where seller_id = req.user.id, optional ?status filter, keyset pagination like GET /api/auctions (limit 1-100 default 20, cursor = last id, ordered by id DESC).",
+      "acceptanceCriteria": [
+        "Only the caller's auctions are returned (seller_id bound to req.user.id)",
+        "Returns { auctions, pagination: { nextCursor } }",
+        "401 without token, 400 for invalid query"
+      ],
+      "dependsOn": [
+        "auction-read"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "auction-update",
+      "title": "Seller can edit an auction before bidding",
+      "description": "PATCH /api/auctions/:id (requireAuth) lets the seller update title, description and endsAt (must stay at least 1 minute in the future). Only allowed while status is PENDING or ACTIVE and there are no bids yet; otherwise 409. Non-sellers get 403.",
+      "acceptanceCriteria": [
+        "403 for non-seller, 404 for unknown auction",
+        "409 if the auction has bids or is CLOSED",
+        "400 for invalid fields; 200 { auction } on success",
+        "UPDATE is parameterized and includes the seller check"
+      ],
+      "dependsOn": [
+        "bids-place"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "auction-search",
+      "title": "Search auctions by title",
+      "description": "Extend GET /api/auctions with optional ?q (1-100 chars). Match title case-insensitively with ILIKE using a parameter, escaping %, _ and \\ in user input so they are matched literally. Combine with existing status filter and pagination.",
+      "acceptanceCriteria": [
+        "?q is passed as a bound parameter, never interpolated",
+        "%, _ and \\ in q are escaped",
+        "Works together with status and cursor pagination",
+        "400 for q longer than 100 chars"
+      ],
+      "dependsOn": [
+        "auction-read"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "my-bids",
+      "title": "List my bids (GET /api/users/me/bids)",
+      "description": "GET /api/users/me/bids (requireAuth) returns the caller's bids newest first with auction id, title, current price and whether the caller is currently the highest bidder (computed in SQL). Pagination limit 1-100 default 50, cursor = last bid id.",
+      "acceptanceCriteria": [
+        "Only bids where bidder_id = req.user.id",
+        "Each item includes isWinning computed in SQL",
+        "401 without token, 400 for invalid query"
+      ],
+      "dependsOn": [
+        "bids-place"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "watchlist",
+      "title": "Auction watchlist",
+      "description": "Add a watchlist table to schema.sql (user_id FK, auction_id FK, created_at, PRIMARY KEY (user_id, auction_id)). Endpoints (requireAuth): POST /api/watchlist/:auctionId (idempotent, 201 or 200 if already present), DELETE /api/watchlist/:auctionId (204), GET /api/watchlist (auctions the user watches, newest first). Use INSERT ... ON CONFLICT DO NOTHING.",
+      "acceptanceCriteria": [
+        "Schema change is idempotent (IF NOT EXISTS)",
+        "Adding twice does not duplicate (ON CONFLICT DO NOTHING)",
+        "404 when the auction does not exist",
+        "All queries scoped to req.user.id"
+      ],
+      "dependsOn": [
+        "auction-read"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "analytics-top-auctions",
+      "title": "Analytics: most active auctions",
+      "description": "GET /api/analytics/top-auctions?window=24h|7d|30d&limit=1-50 (default 7d, 10) returns auctions ranked by bid count in the window with bidCount, uniqueBidders and currentPrice, computed in one SQL query with GROUP BY. Window maps to a fixed interval whitelist (never interpolate user input).",
+      "acceptanceCriteria": [
+        "Single parameterized aggregate query; window mapped through a whitelist",
+        "Returns { auctions: [{ id, title, bidCount, uniqueBidders, currentPrice }] }",
+        "400 for invalid window or limit"
+      ],
+      "dependsOn": [
+        "bids-history"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "openapi-spec",
+      "title": "Serve an OpenAPI 3.1 description of the API",
+      "description": "Add src/docs/openapi.js exporting a plain-object OpenAPI 3.1 document describing every route currently mounted in createApp (paths, methods, auth requirement via bearerAuth, request bodies, main responses), and serve it at GET /api/openapi.json. Add a test that walks the Express router stack and fails if any mounted route is missing from the document.",
+      "acceptanceCriteria": [
+        "GET /api/openapi.json returns valid JSON with openapi: '3.1.0'",
+        "Every mounted route+method appears in paths (enforced by a test)",
+        "Protected routes declare bearerAuth security"
+      ],
+      "dependsOn": [
+        "auction-close"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "status": "pending"
     }
   ]
 }

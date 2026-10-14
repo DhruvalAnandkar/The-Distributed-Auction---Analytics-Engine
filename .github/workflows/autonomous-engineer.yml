@@ -1,6 +1,6 @@
 name: Autonomous Engineer
 
-# Implements ONE task from TASKS.json per run, verifies it against the full test
+# Implements ONE task from TASKS.json per run (up to AGENT_MAX_PRS_PER_DAY a day), verifies it against the full test
 # suite, and opens a pull request. Nothing reaches main without passing tests.
 #
 # Security model:
@@ -13,8 +13,13 @@ name: Autonomous Engineer
 
 on:
   schedule:
-    - cron: '30 23 * * *' # main run: 7:30 PM US Eastern (daylight time)
-    - cron: '30 3 * * *'  # backup run: 11:30 PM Eastern, only if the main run produced nothing
+    # Four slots a day (times are US Eastern daylight time). The gate below
+    # caps output at AGENT_MAX_PRS_PER_DAY (default 3) PRs per rolling 24h;
+    # spare slots cover runs deferred by overloaded models.
+    - cron: '30 11 * * *' # 7:30 AM
+    - cron: '30 17 * * *' # 1:30 PM
+    - cron: '30 23 * * *' # 7:30 PM
+    - cron: '30 3 * * *'  # 11:30 PM
   workflow_dispatch:
     inputs:
       task_id:
@@ -30,9 +35,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Keeps output at about one PR per day: a scheduled run does nothing if an
-  # agent PR is still open or one was opened in the last 20 hours.
-  # Manual runs always proceed.
+  # Rate limit: a scheduled run does nothing if an agent PR is still open
+  # (waiting for review), or if the daily cap of agent PRs was already
+  # reached in the last 24 hours. Manual runs always proceed.
   gate:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -45,13 +50,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EVENT: ${{ github.event_name }}
+          MAX_PER_DAY: ${{ vars.AGENT_MAX_PRS_PER_DAY || '3' }}
         run: |
           if [ "$EVENT" != "schedule" ]; then echo "proceed=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-          since=$(date -u -d '-20 hours' +%Y-%m-%dT%H:%M:%SZ)
-          recent=$(gh pr list --repo "$GITHUB_REPOSITORY" --state all --author 'app/github-actions' --limit 30 \
-            --json createdAt,state --jq "[.[] | select(.state == \"OPEN\" or .createdAt > \"$since\")] | length")
-          echo "agent PRs open or opened since $since: $recent"
-          if [ "$recent" = "0" ]; then echo "proceed=true" >> "$GITHUB_OUTPUT"; else echo "proceed=false" >> "$GITHUB_OUTPUT"; fi
+          case "$MAX_PER_DAY" in ''|*[!0-9]*) MAX_PER_DAY=3 ;; esac
+          since=$(date -u -d '-24 hours' +%Y-%m-%dT%H:%M:%SZ)
+          prs=$(gh pr list --repo "$GITHUB_REPOSITORY" --state all --author 'app/github-actions' --limit 50 --json createdAt,state)
+          open=$(echo "$prs" | jq '[.[] | select(.state == "OPEN")] | length')
+          today=$(echo "$prs" | jq --arg since "$since" '[.[] | select(.createdAt > $since)] | length')
+          echo "open agent PRs: $open | agent PRs in last 24h: $today (cap $MAX_PER_DAY)"
+          if [ "$open" = "0" ] && [ "$today" -lt "$MAX_PER_DAY" ]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          fi
 
   engineer:
     needs: gate
