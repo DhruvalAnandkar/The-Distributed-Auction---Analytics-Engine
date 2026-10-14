@@ -156,7 +156,9 @@
       "dependsOn": [
         "auction-create"
       ],
-      "status": "pending"
+      "status": "pending",
+      "attempts": 1,
+      "lastError": "Test suite failed: 6 failing of 41 tests (exit 1)."
     },
     {
       "id": "bids-place",
