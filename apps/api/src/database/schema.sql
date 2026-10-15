@@ -26,4 +26,15 @@ CREATE TABLE IF NOT EXISTS auctions(
 );
 
 -- Index frequently scanned columns to optimize query execuation
-CREATE INDEX if NOT EXISTS idx_auctions_status ON auctions(status);
+CREATE INDEX IF NOT EXISTS idx_auctions_status ON auctions(status);
+
+-- Core BIDS table
+CREATE TABLE IF NOT EXISTS bids(
+    id SERIAL PRIMARY KEY,
+    auction_id INTEGER REFERENCES auctions(id) ON DELETE CASCADE,
+    bidder_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    amount NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_bids_auction_amount ON bids(auction_id, amount DESC);

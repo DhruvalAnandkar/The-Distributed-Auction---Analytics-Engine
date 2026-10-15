@@ -12,7 +12,7 @@ import AppError from '../utils/AppError.js';
  * Builds the auction controller with its dependencies injected.
  *
  * @param {Object} deps
- * @param {{ query: Function }} deps.db - node-postgres compatible query interface.
+ * @param {{ query: Function, connect?: Function }} deps.db - node-postgres compatible query interface.
  */
 export function createAuctionController({ db }) {
   /**
@@ -164,7 +164,118 @@ export function createAuctionController({ db }) {
     }
   };
 
-  return { createAuction, listAuctions, getAuctionById };
+  /**
+   * POST /api/auctions/:id/bids
+   * Places a bid on an active auction using row-level locking.
+   *
+   * @param {import('express').Request} req
+   * @param {import('express').Response} res
+   * @param {import('express').NextFunction} next
+   */
+  const placeBid = async (req, res, next) => {
+    const { id } = req.params;
+    const { amount } = req.body;
+    const userId = req.user.id;
+
+    let client;
+    try {
+      client = await db.connect();
+      await client.query('BEGIN');
+
+      const auctionResult = await client.query(
+        `SELECT 
+          id,
+          current_price as "currentPrice",
+          status,
+          seller_id as "sellerId",
+          ends_at as "endsAt"
+        FROM auctions
+        WHERE id = $1
+        FOR UPDATE`,
+        [id]
+      );
+
+      if (auctionResult.rows.length === 0) {
+        throw new AppError(404, 'Auction not found');
+      }
+
+      const auction = auctionResult.rows[0];
+
+      if (Number(auction.sellerId) === Number(userId)) {
+        throw new AppError(403, 'Sellers cannot bid on their own auctions');
+      }
+
+      const now = new Date();
+      const endsAt = new Date(auction.endsAt);
+
+      if (auction.status !== 'ACTIVE' || endsAt <= now) {
+        throw new AppError(409, 'Auction is not active or has ended');
+      }
+
+      const currentPrice = Number(auction.currentPrice);
+      const minIncrement = Math.max(1.00, currentPrice * 0.05);
+      const minRequired = currentPrice + minIncrement;
+
+      if (amount < minRequired - 1e-9) {
+        throw new AppError(
+          409,
+          `Bid amount must be at least ${minRequired.toFixed(2)}`
+        );
+      }
+
+      const bidResult = await client.query(
+        `INSERT INTO bids (
+          auction_id,
+          bidder_id,
+          amount
+        ) VALUES ($1, $2, $3)
+        RETURNING 
+          id,
+          auction_id as "auctionId",
+          bidder_id as "bidderId",
+          amount,
+          created_at as "createdAt"`,
+        [id, userId, amount]
+      );
+
+      await client.query(
+        `UPDATE auctions SET current_price = $1 WHERE id = $2`,
+        [amount, id]
+      );
+
+      await client.query('COMMIT');
+
+      const bid = bidResult.rows[0];
+
+      return res.status(201).json({
+        bid: {
+          id: Number(bid.id),
+          auctionId: Number(bid.auctionId),
+          bidderId: Number(bid.bidderId),
+          amount: Number(bid.amount),
+          createdAt: bid.createdAt,
+        },
+        auction: {
+          currentPrice: Number(amount),
+        },
+      });
+    } catch (err) {
+      if (client) {
+        try {
+          await client.query('ROLLBACK');
+        } catch (_) {
+          // ignore rollback failure
+        }
+      }
+      next(err);
+    } finally {
+      if (client) {
+        client.release();
+      }
+    }
+  };
+
+  return { createAuction, listAuctions, getAuctionById, placeBid };
 }
 
 export default createAuctionController;

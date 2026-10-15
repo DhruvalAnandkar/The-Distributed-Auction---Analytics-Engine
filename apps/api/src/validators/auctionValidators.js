@@ -51,3 +51,19 @@ export const listAuctionsQuerySchema = z.object({
 export const auctionIdParamSchema = z.object({
   id: z.coerce.number().int().positive(),
 });
+
+/**
+ * Zod schema for validating bid placement payloads.
+ */
+export const placeBidSchema = z.object({
+  amount: z
+    .number({ required_error: 'Amount is required' })
+    .positive('Amount must be greater than 0')
+    .refine(
+      (val) => {
+        const decimalPart = val.toString().split('.')[1];
+        return !decimalPart || decimalPart.length <= 2;
+      },
+      { message: 'Amount can have at most 2 decimal places' }
+    ),
+});
