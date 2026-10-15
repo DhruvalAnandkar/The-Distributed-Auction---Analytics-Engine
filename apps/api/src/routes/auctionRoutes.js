@@ -5,6 +5,7 @@ import {
   createAuctionSchema,
   listAuctionsQuerySchema,
   auctionIdParamSchema,
+  placeBidSchema,
 } from '../validators/auctionValidators.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 
@@ -12,7 +13,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
  * Builds the /api/auctions router.
  *
  * @param {Object} deps
- * @param {{ query: Function }} deps.db - node-postgres compatible query interface.
+ * @param {{ query: Function, connect?: Function }} deps.db - node-postgres compatible query interface.
  * @returns {import('express').Router}
  */
 export function createAuctionRouter({ db }) {
@@ -27,6 +28,15 @@ export function createAuctionRouter({ db }) {
 
   // POST /api/auctions
   router.post('/', requireAuth, validate(createAuctionSchema), auctions.createAuction);
+
+  // POST /api/auctions/:id/bids
+  router.post(
+    '/:id/bids',
+    requireAuth,
+    validate(auctionIdParamSchema, 'params'),
+    validate(placeBidSchema, 'body'),
+    auctions.placeBid
+  );
 
   return router;
 }
