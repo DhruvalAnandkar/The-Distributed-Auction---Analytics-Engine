@@ -156,8 +156,15 @@
       "dependsOn": [
         "auction-create"
       ],
-      "status": "pending",
-      "attempts": 0
+      "status": "done",
+      "attempts": 1,
+      "completedAt": "2026-10-15T01:47:54.299Z",
+      "files": [
+        "apps/api/src/validators/auctionValidators.js",
+        "apps/api/src/controllers/auctionController.js",
+        "apps/api/src/routes/auctionRoutes.js",
+        "apps/api/test/auctions.read.test.js"
+      ]
     },
     {
       "id": "bids-place",

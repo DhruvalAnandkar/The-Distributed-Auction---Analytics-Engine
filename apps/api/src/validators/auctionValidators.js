@@ -30,8 +30,24 @@ export const createAuctionSchema = z.object({
     const oneMinuteFromNow = new Date(Date.now() + 60 * 1000);
     return endsAtDate >= oneMinuteFromNow;
   },
-  {
+  { 
     message: 'Ends at must be an ISO date at least 1 minute in the future',
     path: ['endsAt'],
   }
 );
+
+/**
+ * Zod schema for validating list auctions query parameters.
+ */
+export const listAuctionsQuerySchema = z.object({
+  status: z.enum(['ACTIVE', 'PENDING', 'CLOSED']).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  cursor: z.coerce.number().int().positive().optional(),
+});
+
+/**
+ * Zod schema for validating auction id route parameter.
+ */
+export const auctionIdParamSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
