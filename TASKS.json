@@ -209,7 +209,15 @@
       "dependsOn": [
         "bids-place"
       ],
-      "status": "pending"
+      "status": "done",
+      "completedAt": "2026-10-15T15:48:30.051Z",
+      "attempts": 1,
+      "files": [
+        "apps/api/src/validators/auctionValidators.js",
+        "apps/api/src/controllers/auctionController.js",
+        "apps/api/src/routes/auctionRoutes.js",
+        "apps/api/test/bids.history.test.js"
+      ]
     },
     {
       "id": "rate-limit",

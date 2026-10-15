@@ -6,6 +6,7 @@ import {
   listAuctionsQuerySchema,
   auctionIdParamSchema,
   placeBidSchema,
+  bidHistoryQuerySchema,
 } from '../validators/auctionValidators.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 
@@ -25,6 +26,14 @@ export function createAuctionRouter({ db }) {
 
   // GET /api/auctions/:id
   router.get('/:id', validate(auctionIdParamSchema, 'params'), auctions.getAuctionById);
+
+  // GET /api/auctions/:id/bids
+  router.get(
+    '/:id/bids',
+    validate(auctionIdParamSchema, 'params'),
+    validate(bidHistoryQuerySchema, 'query'),
+    auctions.getBidHistory
+  );
 
   // POST /api/auctions
   router.post('/', requireAuth, validate(createAuctionSchema), auctions.createAuction);
