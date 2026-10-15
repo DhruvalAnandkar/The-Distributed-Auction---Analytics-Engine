@@ -67,3 +67,10 @@ export const placeBidSchema = z.object({
       { message: 'Amount can have at most 2 decimal places' }
     ),
 });
+
+/**
+ * Zod schema for validating bid history query parameters.
+ */
+export const bidHistoryQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});

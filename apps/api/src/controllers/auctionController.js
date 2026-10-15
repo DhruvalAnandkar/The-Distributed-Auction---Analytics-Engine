@@ -275,7 +275,65 @@ export function createAuctionController({ db }) {
     }
   };
 
-  return { createAuction, listAuctions, getAuctionById, placeBid };
+  /**
+   * GET /api/auctions/:id/bids
+   * Fetches bid history for an auction, newest first, with bidder usernames and highest bid.
+   *
+   * @param {import('express').Request} req
+   * @param {import('express').Response} res
+   * @param {import('express').NextFunction} next
+   */
+  const getBidHistory = async (req, res, next) => {
+    const { id } = req.params;
+    const { limit } = req.query;
+
+    try {
+      const auctionResult = await db.query(
+        `SELECT id, current_price as "currentPrice" FROM auctions WHERE id = $1`,
+        [id]
+      );
+
+      if (auctionResult.rows.length === 0) {
+        return next(new AppError(404, 'Auction not found'));
+      }
+
+      const auction = auctionResult.rows[0];
+
+      const bidsResult = await db.query(
+        `SELECT 
+          b.id,
+          b.auction_id as "auctionId",
+          b.bidder_id as "bidderId",
+          b.amount,
+          b.created_at as "createdAt",
+          u.username as "bidderUsername"
+        FROM bids b
+        JOIN users u ON b.bidder_id = u.id
+        WHERE b.auction_id = $1
+        ORDER BY b.created_at DESC, b.id DESC
+        LIMIT $2`,
+        [id, limit]
+      );
+
+      const bids = bidsResult.rows.map((row) => ({
+        id: Number(row.id),
+        auctionId: Number(row.auctionId),
+        bidderId: Number(row.bidderId),
+        amount: Number(row.amount),
+        createdAt: row.createdAt,
+        bidderUsername: row.bidderUsername,
+      }));
+
+      return res.status(200).json({
+        bids,
+        highestBid: Number(auction.currentPrice),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  return { createAuction, listAuctions, getAuctionById, placeBid, getBidHistory };
 }
 
 export default createAuctionController;
