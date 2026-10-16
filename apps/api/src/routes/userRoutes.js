@@ -3,6 +3,7 @@ import { createUserController } from '../controllers/userController.js';
 import { validate } from '../middleware/validate.js';
 import { registerSchema, loginSchema } from '../validators/userValidators.js';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { createRateLimiter } from '../middleware/rateLimit.js';
 
 /**
  * Builds the /api/users router.
@@ -15,11 +16,17 @@ export function createUserRouter({ db }) {
   const router = express.Router();
   const users = createUserController({ db });
 
+  const loginRateLimiter = createRateLimiter({
+    capacity: 5,
+    refillPerSecond: 0.2, // 1 token every 5 seconds
+    key: (req) => req.ip || req.socket.remoteAddress || 'unknown-ip',
+  });
+
   // POST /api/users/register
   router.post('/register', validate(registerSchema), users.registerUser);
 
   // POST /api/users/login
-  router.post('/login', validate(loginSchema), users.loginUser);
+  router.post('/login', loginRateLimiter, validate(loginSchema), users.loginUser);
 
   // GET /api/users/me
   router.get('/me', requireAuth, users.getCurrentUser);
