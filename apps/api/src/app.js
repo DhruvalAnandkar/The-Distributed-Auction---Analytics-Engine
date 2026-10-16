@@ -4,6 +4,7 @@ import { createUserRouter } from './routes/userRoutes.js';
 import { createAuctionRouter } from './routes/auctionRoutes.js';
 import { notFound } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { requestContext } from './middleware/requestContext.js';
 
 /**
  * Builds the Express application.
@@ -17,6 +18,7 @@ export function createApp({ db = defaultPool } = {}) {
   const app = express();
 
   app.use(express.json());
+  app.use(requestContext);
 
   app.use('/api/users', createUserRouter({ db }));
   app.use('/api/auctions', createAuctionRouter({ db }));

@@ -9,6 +9,8 @@ import AppError from '../utils/AppError.js';
  * @param {import('express').NextFunction} next
  */
 export function errorHandler(err, req, res, next) {
+  const requestId = req.requestId || res.locals?.requestId;
+
   // Handle malformed JSON body error from express.json()
   if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
     return res.status(400).json({ error: 'Invalid JSON payload' });
