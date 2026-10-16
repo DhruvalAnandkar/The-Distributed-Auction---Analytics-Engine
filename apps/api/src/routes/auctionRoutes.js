@@ -9,6 +9,7 @@ import {
   bidHistoryQuerySchema,
 } from '../validators/auctionValidators.js';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { createRateLimiter } from '../middleware/rateLimit.js';
 
 /**
  * Builds the /api/auctions router.
@@ -20,6 +21,12 @@ import { requireAuth } from '../middleware/requireAuth.js';
 export function createAuctionRouter({ db }) {
   const router = express.Router();
   const auctions = createAuctionController({ db });
+
+  const bidRateLimiter = createRateLimiter({
+    capacity: 10,
+    refillPerSecond: 2, // 2 tokens per second
+    key: (req) => String(req.user?.id || 'anonymous'),
+  });
 
   // GET /api/auctions
   router.get('/', validate(listAuctionsQuerySchema, 'query'), auctions.listAuctions);
@@ -42,6 +49,7 @@ export function createAuctionRouter({ db }) {
   router.post(
     '/:id/bids',
     requireAuth,
+    bidRateLimiter,
     validate(auctionIdParamSchema, 'params'),
     validate(placeBidSchema, 'body'),
     auctions.placeBid
