@@ -316,7 +316,13 @@
         "apps/api/test/**"
       ],
       "dependsOn": [],
-      "status": "pending"
+      "status": "done",
+      "completedAt": "2026-10-17T14:23:38.629Z",
+      "attempts": 1,
+      "files": [
+        "apps/api/src/app.js",
+        "apps/api/test/readiness.test.js"
+      ]
     },
     {
       "id": "security-headers",
