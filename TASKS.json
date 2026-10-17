@@ -290,7 +290,17 @@
       "dependsOn": [
         "bids-history"
       ],
-      "status": "pending"
+      "status": "done",
+      "completedAt": "2026-10-17T01:30:59.827Z",
+      "attempts": 1,
+      "files": [
+        "apps/api/src/services/auctionCloser.js",
+        "apps/api/src/middleware/requireAdminAuth.js",
+        "apps/api/src/controllers/adminController.js",
+        "apps/api/src/routes/adminRoutes.js",
+        "apps/api/src/app.js",
+        "apps/api/test/auctions.close.test.js"
+      ]
     },
     {
       "id": "readiness",
