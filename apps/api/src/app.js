@@ -2,6 +2,7 @@ import express from 'express';
 import defaultPool from './config/db.js';
 import { createUserRouter } from './routes/userRoutes.js';
 import { createAuctionRouter } from './routes/auctionRoutes.js';
+import { createAdminRouter } from './routes/adminRoutes.js';
 import { notFound } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requestContext } from './middleware/requestContext.js';
@@ -22,6 +23,7 @@ export function createApp({ db = defaultPool } = {}) {
 
   app.use('/api/users', createUserRouter({ db }));
   app.use('/api/auctions', createAuctionRouter({ db }));
+  app.use('/api/admin', createAdminRouter({ db }));
 
   app.get('/health', async (req, res) => {
     let dbStatus = 'DOWN';
