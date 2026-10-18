@@ -7,6 +7,7 @@ import { notFound } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requestContext } from './middleware/requestContext.js';
 import { securityHeaders } from './middleware/securityHeaders.js';
+import { createCors } from './middleware/cors.js';
 
 /**
  * Builds the Express application.
@@ -16,14 +17,23 @@ import { securityHeaders } from './middleware/securityHeaders.js';
  *   node-postgres `query` interface. Defaults to the shared connection pool.
  * @param {number} [deps.readinessTimeoutMs=1000] - Timeout in milliseconds for readiness probe.
  * @param {string | number} [deps.bodyLimit='100kb'] - Request body size limit for express.json.
+ * @param {string | string[] | Set<string>} [deps.corsOrigins] - Allowed origins for CORS.
+ * @param {string | string[] | Set<string>} [deps.origins] - Alias for corsOrigins.
  * @returns {import('express').Express}
  */
-export function createApp({ db = defaultPool, readinessTimeoutMs = 1000, bodyLimit = '100kb' } = {}) {
+export function createApp({
+  db = defaultPool,
+  readinessTimeoutMs = 1000,
+  bodyLimit = '100kb',
+  corsOrigins,
+  origins,
+} = {}) {
   const app = express();
 
   app.disable('x-powered-by');
 
   app.use(securityHeaders);
+  app.use(createCors({ origins: origins !== undefined ? origins : corsOrigins }));
   app.use(express.json({ limit: bodyLimit }));
   app.use(requestContext);
 
