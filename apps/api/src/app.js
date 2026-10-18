@@ -6,6 +6,7 @@ import { createAdminRouter } from './routes/adminRoutes.js';
 import { notFound } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requestContext } from './middleware/requestContext.js';
+import { securityHeaders } from './middleware/securityHeaders.js';
 
 /**
  * Builds the Express application.
@@ -19,6 +20,9 @@ import { requestContext } from './middleware/requestContext.js';
 export function createApp({ db = defaultPool, readinessTimeoutMs = 1000 } = {}) {
   const app = express();
 
+  app.disable('x-powered-by');
+
+  app.use(securityHeaders);
   app.use(express.json());
   app.use(requestContext);
 
