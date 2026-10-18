@@ -15,15 +15,16 @@ import { securityHeaders } from './middleware/securityHeaders.js';
  * @param {{ query: Function, connect?: Function }} [deps.db] - Anything with the
  *   node-postgres `query` interface. Defaults to the shared connection pool.
  * @param {number} [deps.readinessTimeoutMs=1000] - Timeout in milliseconds for readiness probe.
+ * @param {string | number} [deps.bodyLimit='100kb'] - Request body size limit for express.json.
  * @returns {import('express').Express}
  */
-export function createApp({ db = defaultPool, readinessTimeoutMs = 1000 } = {}) {
+export function createApp({ db = defaultPool, readinessTimeoutMs = 1000, bodyLimit = '100kb' } = {}) {
   const app = express();
 
   app.disable('x-powered-by');
 
   app.use(securityHeaders);
-  app.use(express.json());
+  app.use(express.json({ limit: bodyLimit }));
   app.use(requestContext);
 
   app.use('/api/users', createUserRouter({ db }));

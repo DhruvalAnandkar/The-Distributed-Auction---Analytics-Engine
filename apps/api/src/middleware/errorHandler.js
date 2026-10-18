@@ -11,6 +11,11 @@ import AppError from '../utils/AppError.js';
 export function errorHandler(err, req, res, next) {
   const requestId = req.requestId || res.locals?.requestId;
 
+  // Handle payload too large error from express.json() / body-parser
+  if (err && (err.type === 'entity.too.large' || err.status === 413 || err.statusCode === 413)) {
+    return res.status(413).json({ error: 'Payload too large' });
+  }
+
   // Handle malformed JSON body error from express.json()
   if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
     return res.status(400).json({ error: 'Invalid JSON payload' });
