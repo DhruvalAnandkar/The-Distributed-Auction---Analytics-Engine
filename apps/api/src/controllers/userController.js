@@ -139,7 +139,53 @@ export function createUserController({ db }) {
     }
   };
 
-  return { registerUser, loginUser, getCurrentUser };
+  /**
+   * GET /api/users/:id
+   *
+   * Fetches public user profile with SQL-computed auctionCount.
+   * Never exposes email or password hash.
+   *
+   * @param {import('express').Request} req
+   * @param {import('express').Response} res
+   * @param {import('express').NextFunction} next
+   */
+  const getUserProfile = async (req, res, next) => {
+    const { id } = req.params;
+
+    try {
+      const result = await db.query(
+        `SELECT 
+          u.id,
+          u.username,
+          u.created_at as "createdAt",
+          COUNT(a.id)::int as "auctionCount"
+        FROM users u
+        LEFT JOIN auctions a ON a.seller_id = u.id
+        WHERE u.id = $1
+        GROUP BY u.id, u.username, u.created_at`,
+        [id]
+      );
+
+      if (result.rows.length === 0) {
+        return next(new AppError(404, 'User not found'));
+      }
+
+      const row = result.rows[0];
+
+      return res.status(200).json({
+        user: {
+          id: Number(row.id),
+          username: row.username,
+          createdAt: row.createdAt ?? row.created_at,
+          auctionCount: Number(row.auctionCount ?? row.auction_count ?? 0),
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  return { registerUser, loginUser, getCurrentUser, getUserProfile };
 }
 
 export default createUserController;

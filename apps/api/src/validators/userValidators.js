@@ -34,3 +34,10 @@ export const loginSchema = z.object({
     .string({ required_error: 'Password is required' })
     .min(1, 'Password is required'),
 });
+
+/**
+ * Zod schema for validating user id route parameter.
+ */
+export const userIdParamSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
