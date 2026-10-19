@@ -458,7 +458,15 @@
         "apps/api/src/**",
         "apps/api/test/**"
       ],
-      "status": "pending"
+      "status": "done",
+      "completedAt": "2026-10-19T17:43:25.387Z",
+      "attempts": 1,
+      "files": [
+        "apps/api/src/validators/userValidators.js",
+        "apps/api/src/controllers/userController.js",
+        "apps/api/src/routes/userRoutes.js",
+        "apps/api/test/users.profile.test.js"
+      ]
     },
     {
       "id": "user-update-profile",
