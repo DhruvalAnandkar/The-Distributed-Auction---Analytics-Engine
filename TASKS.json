@@ -433,7 +433,14 @@
         "apps/api/src/**",
         "apps/api/test/**"
       ],
-      "status": "pending"
+      "status": "done",
+      "completedAt": "2026-10-19T09:20:16.664Z",
+      "attempts": 1,
+      "files": [
+        "apps/api/src/utils/shutdown.js",
+        "apps/api/src/server.js",
+        "apps/api/test/shutdown.test.js"
+      ]
     },
     {
       "id": "user-public-profile",
