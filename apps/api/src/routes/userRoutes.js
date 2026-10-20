@@ -7,6 +7,7 @@ import {
   userIdParamSchema,
   updateProfileSchema,
   changePasswordSchema,
+  myAuctionsQuerySchema,
 } from '../validators/userValidators.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { createRateLimiter } from '../middleware/rateLimit.js';
@@ -36,6 +37,14 @@ export function createUserRouter({ db }) {
 
   // GET /api/users/me
   router.get('/me', requireAuth, users.getCurrentUser);
+
+  // GET /api/users/me/auctions
+  router.get(
+    '/me/auctions',
+    requireAuth,
+    validate(myAuctionsQuerySchema, 'query'),
+    users.getMyAuctions
+  );
 
   // PATCH /api/users/me
   router.patch('/me', requireAuth, validate(updateProfileSchema), users.updateProfile);

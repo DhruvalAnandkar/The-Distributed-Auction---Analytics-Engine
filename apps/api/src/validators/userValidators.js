@@ -84,3 +84,12 @@ export const changePasswordSchema = z
     message: 'New password must be different from current password',
     path: ['newPassword'],
   });
+
+/**
+ * Zod schema for validating my auctions query parameters.
+ */
+export const myAuctionsQuerySchema = z.object({
+  status: z.enum(['ACTIVE', 'PENDING', 'CLOSED']).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  cursor: z.coerce.number().int().positive().optional(),
+});
