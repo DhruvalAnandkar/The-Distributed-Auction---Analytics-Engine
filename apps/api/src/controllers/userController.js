@@ -334,7 +334,73 @@ export function createUserController({ db }) {
     }
   };
 
-  return { registerUser, loginUser, getCurrentUser, getUserProfile, updateProfile, changePassword };
+  /**
+   * GET /api/users/me/auctions
+   *
+   * Lists auctions created by the authenticated user with optional status filter
+   * and keyset pagination ordered by id DESC.
+   *
+   * @param {import('express').Request} req
+   * @param {import('express').Response} res
+   * @param {import('express').NextFunction} next
+   */
+  const getMyAuctions = async (req, res, next) => {
+    const userId = req.user.id;
+    const { status, limit, cursor } = req.query;
+
+    try {
+      const conditions = ['seller_id = $1'];
+      const params = [userId];
+
+      if (status) {
+        params.push(status);
+        conditions.push(`status = $${params.length}`);
+      }
+
+      if (cursor !== undefined) {
+        params.push(cursor);
+        conditions.push(`id < $${params.length}`);
+      }
+
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+      params.push(limit + 1);
+      const limitParamIndex = params.length;
+
+      const result = await db.query(
+        `SELECT 
+          id,
+          title,
+          description,
+          start_price as "startPrice",
+          current_price as "currentPrice",
+          status,
+          seller_id as "sellerId",
+          ends_at as "endsAt",
+          created_at as "createdAt"
+        FROM auctions
+        ${whereClause}
+        ORDER BY id DESC
+        LIMIT $${limitParamIndex}`,
+        params
+      );
+
+      const hasMore = result.rows.length > limit;
+      const auctions = hasMore ? result.rows.slice(0, limit) : result.rows;
+      const nextCursor = hasMore ? auctions[auctions.length - 1].id : null;
+
+      return res.status(200).json({
+        auctions,
+        pagination: {
+          nextCursor,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  return { registerUser, loginUser, getCurrentUser, getUserProfile, updateProfile, changePassword, getMyAuctions };
 }
 
 export default createUserController;
