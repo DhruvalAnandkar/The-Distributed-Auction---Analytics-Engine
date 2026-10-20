@@ -22,6 +22,12 @@ import AppError from '../utils/AppError.js';
  */
 
 /**
+ * @typedef {Object} UserChangePasswordPayload
+ * @property {string} currentPassword - Current user password.
+ * @property {string} newPassword - New user password.
+ */
+
+/**
  * Builds the user controller with its dependencies injected.
  *
  * Injecting `db` (instead of importing the pool) lets tests pass a fake that
@@ -229,6 +235,60 @@ export function createUserController({ db }) {
   };
 
   /**
+   * POST /api/users/me/password
+   *
+   * Verifies current password with bcrypt, enforces new password rules,
+   * rejects unchanged password, and updates password with cost-10 bcrypt hash.
+   *
+   * @param {import('express').Request<{}, {}, UserChangePasswordPayload>} req
+   * @param {import('express').Response} res
+   * @param {import('express').NextFunction} next
+   */
+  const changePassword = async (req, res, next) => {
+    const userId = req.user.id;
+    const { currentPassword, newPassword } = req.body;
+
+    try {
+      if (currentPassword === newPassword) {
+        return next(new AppError(400, 'New password must be different from current password'));
+      }
+
+      const userResult = await db.query(
+        'SELECT id, password FROM users WHERE id = $1',
+        [userId]
+      );
+
+      if (userResult.rows.length === 0) {
+        return next(new AppError(404, 'User not found'));
+      }
+
+      const user = userResult.rows[0];
+      const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+
+      if (!isCurrentPasswordValid) {
+        return next(new AppError(401, 'Invalid current password'));
+      }
+
+      const isSamePassword = await bcrypt.compare(newPassword, user.password);
+      if (isSamePassword) {
+        return next(new AppError(400, 'New password must be different from current password'));
+      }
+
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+      await db.query(
+        'UPDATE users SET password = $1 WHERE id = $2',
+        [hashedPassword, userId]
+      );
+
+      return res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
    * GET /api/users/:id
    *
    * Fetches public user profile with SQL-computed auctionCount.
@@ -274,7 +334,7 @@ export function createUserController({ db }) {
     }
   };
 
-  return { registerUser, loginUser, getCurrentUser, getUserProfile, updateProfile };
+  return { registerUser, loginUser, getCurrentUser, getUserProfile, updateProfile, changePassword };
 }
 
 export default createUserController;
