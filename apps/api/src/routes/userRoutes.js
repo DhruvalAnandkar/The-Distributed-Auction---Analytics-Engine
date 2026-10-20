@@ -6,6 +6,7 @@ import {
   loginSchema,
   userIdParamSchema,
   updateProfileSchema,
+  changePasswordSchema,
 } from '../validators/userValidators.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { createRateLimiter } from '../middleware/rateLimit.js';
@@ -38,6 +39,9 @@ export function createUserRouter({ db }) {
 
   // PATCH /api/users/me
   router.patch('/me', requireAuth, validate(updateProfileSchema), users.updateProfile);
+
+  // POST /api/users/me/password
+  router.post('/me/password', requireAuth, validate(changePasswordSchema), users.changePassword);
 
   // GET /api/users/:id
   router.get('/:id', validate(userIdParamSchema, 'params'), users.getUserProfile);

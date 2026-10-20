@@ -63,3 +63,24 @@ export const updateProfileSchema = z
   .refine((data) => data.username !== undefined || data.email !== undefined, {
     message: 'At least one field (username or email) must be provided',
   });
+
+/**
+ * Zod schema for validating user change password payloads.
+ */
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z
+      .string({ required_error: 'Current password is required' })
+      .min(1, 'Current password is required'),
+    newPassword: z
+      .string({ required_error: 'New password is required' })
+      .min(8, 'Password must be between 8 and 128 characters')
+      .max(128, 'Password must be between 8 and 128 characters')
+      .refine((val) => /[a-zA-Z]/.test(val) && /[0-9]/.test(val), {
+        message: 'Password must contain at least one letter and one number',
+      }),
+  })
+  .refine((data) => data.currentPassword !== data.newPassword, {
+    message: 'New password must be different from current password',
+    path: ['newPassword'],
+  });
