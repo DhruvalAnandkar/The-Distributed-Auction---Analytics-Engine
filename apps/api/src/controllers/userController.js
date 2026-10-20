@@ -16,6 +16,12 @@ import AppError from '../utils/AppError.js';
  */
 
 /**
+ * @typedef {Object} UserUpdateProfilePayload
+ * @property {string} [username] - New username.
+ * @property {string} [email] - New email address.
+ */
+
+/**
  * Builds the user controller with its dependencies injected.
  *
  * Injecting `db` (instead of importing the pool) lets tests pass a fake that
@@ -140,6 +146,89 @@ export function createUserController({ db }) {
   };
 
   /**
+   * PATCH /api/users/me
+   *
+   * Updates username and/or email for the authenticated user.
+   * Rejects with 409 if new username or email is already taken by another user.
+   * Scopes UPDATE to req.user.id and returns updated user without password.
+   *
+   * @param {import('express').Request<{}, {}, UserUpdateProfilePayload>} req
+   * @param {import('express').Response} res
+   * @param {import('express').NextFunction} next
+   */
+  const updateProfile = async (req, res, next) => {
+    const userId = req.user.id;
+    const { username, email } = req.body;
+
+    try {
+      const conflictConditions = [];
+      const conflictParams = [];
+
+      if (username !== undefined) {
+        conflictParams.push(username);
+        conflictConditions.push(`username = $${conflictParams.length}`);
+      }
+
+      if (email !== undefined) {
+        conflictParams.push(email);
+        conflictConditions.push(`email = $${conflictParams.length}`);
+      }
+
+      conflictParams.push(userId);
+      const userIdParamIndex = conflictParams.length;
+
+      const conflictCheck = await db.query(
+        `SELECT id FROM users WHERE (${conflictConditions.join(' OR ')}) AND id != $${userIdParamIndex}`,
+        conflictParams
+      );
+
+      if (conflictCheck.rows.length > 0) {
+        return next(new AppError(409, 'Username or email already in use'));
+      }
+
+      const setClauses = [];
+      const updateParams = [];
+
+      if (username !== undefined) {
+        updateParams.push(username);
+        setClauses.push(`username = $${updateParams.length}`);
+      }
+
+      if (email !== undefined) {
+        updateParams.push(email);
+        setClauses.push(`email = $${updateParams.length}`);
+      }
+
+      updateParams.push(userId);
+      const whereParamIndex = updateParams.length;
+
+      const updateResult = await db.query(
+        `UPDATE users
+         SET ${setClauses.join(', ')}
+         WHERE id = $${whereParamIndex}
+         RETURNING id, username, email, created_at`,
+        updateParams
+      );
+
+      if (updateResult.rows.length === 0) {
+        return next(new AppError(404, 'User not found'));
+      }
+
+      const user = updateResult.rows[0];
+      const { password: _, ...userWithoutPassword } = user;
+
+      return res.status(200).json({
+        user: userWithoutPassword,
+      });
+    } catch (err) {
+      if (err.code === '23505') {
+        return next(new AppError(409, 'Username or email already in use'));
+      }
+      next(err);
+    }
+  };
+
+  /**
    * GET /api/users/:id
    *
    * Fetches public user profile with SQL-computed auctionCount.
@@ -185,7 +274,7 @@ export function createUserController({ db }) {
     }
   };
 
-  return { registerUser, loginUser, getCurrentUser, getUserProfile };
+  return { registerUser, loginUser, getCurrentUser, getUserProfile, updateProfile };
 }
 
 export default createUserController;
