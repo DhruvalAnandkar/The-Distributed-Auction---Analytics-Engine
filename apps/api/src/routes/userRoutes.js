@@ -1,7 +1,12 @@
 import express from 'express';
 import { createUserController } from '../controllers/userController.js';
 import { validate } from '../middleware/validate.js';
-import { registerSchema, loginSchema, userIdParamSchema } from '../validators/userValidators.js';
+import {
+  registerSchema,
+  loginSchema,
+  userIdParamSchema,
+  updateProfileSchema,
+} from '../validators/userValidators.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { createRateLimiter } from '../middleware/rateLimit.js';
 
@@ -30,6 +35,9 @@ export function createUserRouter({ db }) {
 
   // GET /api/users/me
   router.get('/me', requireAuth, users.getCurrentUser);
+
+  // PATCH /api/users/me
+  router.patch('/me', requireAuth, validate(updateProfileSchema), users.updateProfile);
 
   // GET /api/users/:id
   router.get('/:id', validate(userIdParamSchema, 'params'), users.getUserProfile);

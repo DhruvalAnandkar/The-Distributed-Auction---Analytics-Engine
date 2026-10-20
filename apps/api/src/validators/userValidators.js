@@ -41,3 +41,25 @@ export const loginSchema = z.object({
 export const userIdParamSchema = z.object({
   id: z.coerce.number().int().positive(),
 });
+
+/**
+ * Zod schema for validating user profile update payloads.
+ * Requires at least one of username or email to be provided.
+ */
+export const updateProfileSchema = z
+  .object({
+    username: z
+      .string()
+      .min(3, 'Username must be between 3 and 50 characters')
+      .max(50, 'Username must be between 3 and 50 characters')
+      .regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores')
+      .optional(),
+    email: z
+      .string()
+      .email('Invalid email address')
+      .toLowerCase()
+      .optional(),
+  })
+  .refine((data) => data.username !== undefined || data.email !== undefined, {
+    message: 'At least one field (username or email) must be provided',
+  });
