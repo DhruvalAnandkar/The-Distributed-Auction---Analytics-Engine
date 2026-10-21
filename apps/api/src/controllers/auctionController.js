@@ -1,4 +1,5 @@
 import AppError from '../utils/AppError.js';
+import { escapeLike } from '../utils/escapeLike.js';
 
 /**
  * @typedef {Object} AuctionCreationPayload
@@ -167,14 +168,14 @@ export function createAuctionController({ db }) {
 
   /**
    * GET /api/auctions
-   * Lists auctions with optional status filter and keyset pagination.
+   * Lists auctions with optional status filter, case-insensitive title search, and keyset pagination.
    *
    * @param {import('express').Request} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
    */
   const listAuctions = async (req, res, next) => {
-    const { status, limit, cursor } = req.query;
+    const { status, limit, cursor, q } = req.query;
 
     try {
       const conditions = [];
@@ -183,6 +184,12 @@ export function createAuctionController({ db }) {
       if (status) {
         params.push(status);
         conditions.push(`status = $${params.length}`);
+      }
+
+      if (q) {
+        const escaped = escapeLike(q);
+        params.push(`%${escaped}%`);
+        conditions.push(`title ILIKE $${params.length}`);
       }
 
       if (cursor !== undefined) {

@@ -82,6 +82,11 @@ export const listAuctionsQuerySchema = z.object({
   status: z.enum(['ACTIVE', 'PENDING', 'CLOSED']).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   cursor: z.coerce.number().int().positive().optional(),
+  q: z
+    .string()
+    .min(1, 'Search query must be between 1 and 100 characters')
+    .max(100, 'Search query must be between 1 and 100 characters')
+    .optional(),
 });
 
 /**
