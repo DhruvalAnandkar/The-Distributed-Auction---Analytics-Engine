@@ -9,6 +9,13 @@ import AppError from '../utils/AppError.js';
  */
 
 /**
+ * @typedef {Object} AuctionUpdatePayload
+ * @property {string} [title] - Updated auction title.
+ * @property {string | null} [description] - Updated auction description.
+ * @property {string} [endsAt] - Updated auction ends at ISO date.
+ */
+
+/**
  * Builds the auction controller with its dependencies injected.
  *
  * @param {Object} deps
@@ -55,6 +62,103 @@ export function createAuctionController({ db }) {
 
       return res.status(201).json({
         auction,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
+   * PATCH /api/auctions/:id
+   * Updates an auction's title, description, or endsAt before any bidding.
+   * Only allowed for the seller when status is PENDING or ACTIVE and no bids exist.
+   *
+   * @param {import('express').Request<{ id: string }, {}, AuctionUpdatePayload>} req
+   * @param {import('express').Response} res
+   * @param {import('express').NextFunction} next
+   */
+  const updateAuction = async (req, res, next) => {
+    const { id } = req.params;
+    const { title, description, endsAt } = req.body;
+    const userId = req.user.id;
+
+    try {
+      const auctionResult = await db.query(
+        `SELECT id, seller_id as "sellerId", status FROM auctions WHERE id = $1`,
+        [id]
+      );
+
+      if (auctionResult.rows.length === 0) {
+        return next(new AppError(404, 'Auction not found'));
+      }
+
+      const auction = auctionResult.rows[0];
+      const sellerId = auction.sellerId ?? auction.seller_id;
+
+      if (Number(sellerId) !== Number(userId)) {
+        return next(new AppError(403, 'Only the seller can edit this auction'));
+      }
+
+      if (auction.status !== 'PENDING' && auction.status !== 'ACTIVE') {
+        return next(new AppError(409, 'Auction cannot be edited in its current status'));
+      }
+
+      const bidsResult = await db.query(
+        `SELECT id FROM bids WHERE auction_id = $1 LIMIT 1`,
+        [id]
+      );
+
+      if (bidsResult.rows.length > 0) {
+        return next(new AppError(409, 'Cannot edit auction that already has bids'));
+      }
+
+      const setClauses = [];
+      const updateParams = [];
+
+      if (title !== undefined) {
+        updateParams.push(title);
+        setClauses.push(`title = $${updateParams.length}`);
+      }
+
+      if (description !== undefined) {
+        updateParams.push(description);
+        setClauses.push(`description = $${updateParams.length}`);
+      }
+
+      if (endsAt !== undefined) {
+        updateParams.push(endsAt);
+        setClauses.push(`ends_at = $${updateParams.length}`);
+      }
+
+      updateParams.push(id);
+      const idParamIndex = updateParams.length;
+
+      updateParams.push(userId);
+      const sellerIdParamIndex = updateParams.length;
+
+      const updateResult = await db.query(
+        `UPDATE auctions
+         SET ${setClauses.join(', ')}
+         WHERE id = $${idParamIndex} AND seller_id = $${sellerIdParamIndex}
+         RETURNING 
+           id,
+           title,
+           description,
+           start_price as "startPrice",
+           current_price as "currentPrice",
+           status,
+           seller_id as "sellerId",
+           ends_at as "endsAt",
+           created_at as "createdAt"`,
+        updateParams
+      );
+
+      if (updateResult.rows.length === 0) {
+        return next(new AppError(404, 'Auction not found'));
+      }
+
+      return res.status(200).json({
+        auction: updateResult.rows[0],
       });
     } catch (err) {
       next(err);
@@ -333,7 +437,7 @@ export function createAuctionController({ db }) {
     }
   };
 
-  return { createAuction, listAuctions, getAuctionById, placeBid, getBidHistory };
+  return { createAuction, updateAuction, listAuctions, getAuctionById, placeBid, getBidHistory };
 }
 
 export default createAuctionController;

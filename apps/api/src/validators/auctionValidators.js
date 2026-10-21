@@ -37,6 +37,45 @@ export const createAuctionSchema = z.object({
 );
 
 /**
+ * Zod schema for validating auction update payloads.
+ */
+export const updateAuctionSchema = z
+  .object({
+    title: z
+      .string()
+      .min(3, 'Title must be between 3 and 100 characters')
+      .max(100, 'Title must be between 3 and 100 characters')
+      .optional(),
+    description: z.string().nullable().optional(),
+    endsAt: z.string().optional(),
+  })
+  .strict()
+  .refine(
+    (data) =>
+      data.title !== undefined ||
+      data.description !== undefined ||
+      data.endsAt !== undefined,
+    {
+      message: 'At least one field must be provided',
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.endsAt === undefined) return true;
+      const endsAtDate = new Date(data.endsAt);
+      if (Number.isNaN(endsAtDate.getTime())) {
+        return false;
+      }
+      const oneMinuteFromNow = new Date(Date.now() + 60 * 1000);
+      return endsAtDate >= oneMinuteFromNow;
+    },
+    {
+      message: 'Ends at must be an ISO date at least 1 minute in the future',
+      path: ['endsAt'],
+    }
+  );
+
+/**
  * Zod schema for validating list auctions query parameters.
  */
 export const listAuctionsQuerySchema = z.object({

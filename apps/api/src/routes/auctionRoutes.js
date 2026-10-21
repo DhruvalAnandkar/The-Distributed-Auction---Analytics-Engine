@@ -3,6 +3,7 @@ import { createAuctionController } from '../controllers/auctionController.js';
 import { validate } from '../middleware/validate.js';
 import {
   createAuctionSchema,
+  updateAuctionSchema,
   listAuctionsQuerySchema,
   auctionIdParamSchema,
   placeBidSchema,
@@ -44,6 +45,15 @@ export function createAuctionRouter({ db }) {
 
   // POST /api/auctions
   router.post('/', requireAuth, validate(createAuctionSchema), auctions.createAuction);
+
+  // PATCH /api/auctions/:id
+  router.patch(
+    '/:id',
+    requireAuth,
+    validate(auctionIdParamSchema, 'params'),
+    validate(updateAuctionSchema),
+    auctions.updateAuction
+  );
 
   // POST /api/auctions/:id/bids
   router.post(
