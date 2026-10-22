@@ -3,6 +3,7 @@ import defaultPool from './config/db.js';
 import { createUserRouter } from './routes/userRoutes.js';
 import { createAuctionRouter } from './routes/auctionRoutes.js';
 import { createAdminRouter } from './routes/adminRoutes.js';
+import { createWatchlistRouter } from './routes/watchlistRoutes.js';
 import { notFound } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requestContext } from './middleware/requestContext.js';
@@ -40,6 +41,7 @@ export function createApp({
   app.use('/api/users', createUserRouter({ db }));
   app.use('/api/auctions', createAuctionRouter({ db }));
   app.use('/api/admin', createAdminRouter({ db }));
+  app.use('/api/watchlist', createWatchlistRouter({ db }));
 
   app.get('/health/ready', async (req, res) => {
     let timer;
@@ -78,7 +80,8 @@ export function createApp({
     try {
       await db.query('SELECT 1');
       dbStatus = 'UP';
-    } catch (err) {
+    }
+    catch (err) {
       console.error(`[Health Check Error] Database connectivity failed: ${err.message}`);
     }
 
