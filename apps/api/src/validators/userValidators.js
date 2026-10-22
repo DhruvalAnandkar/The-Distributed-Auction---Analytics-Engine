@@ -93,3 +93,11 @@ export const myAuctionsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   cursor: z.coerce.number().int().positive().optional(),
 });
+
+/**
+ * Zod schema for validating my bids query parameters.
+ */
+export const myBidsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: z.coerce.number().int().positive().optional(),
+});

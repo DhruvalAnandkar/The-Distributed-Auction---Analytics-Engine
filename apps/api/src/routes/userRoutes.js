@@ -8,6 +8,7 @@ import {
   updateProfileSchema,
   changePasswordSchema,
   myAuctionsQuerySchema,
+  myBidsQuerySchema,
 } from '../validators/userValidators.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { createRateLimiter } from '../middleware/rateLimit.js';
@@ -44,6 +45,14 @@ export function createUserRouter({ db }) {
     requireAuth,
     validate(myAuctionsQuerySchema, 'query'),
     users.getMyAuctions
+  );
+
+  // GET /api/users/me/bids
+  router.get(
+    '/me/bids',
+    requireAuth,
+    validate(myBidsQuerySchema, 'query'),
+    users.getMyBids
   );
 
   // PATCH /api/users/me

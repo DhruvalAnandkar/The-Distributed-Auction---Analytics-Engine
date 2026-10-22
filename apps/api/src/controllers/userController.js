@@ -400,7 +400,89 @@ export function createUserController({ db }) {
     }
   };
 
-  return { registerUser, loginUser, getCurrentUser, getUserProfile, updateProfile, changePassword, getMyAuctions };
+  /**
+   * GET /api/users/me/bids
+   *
+   * Lists bids placed by the authenticated user newest first with auction details,
+   * SQL-computed isWinning flag, and keyset pagination.
+   *
+   * @param {import('express').Request} req
+   * @param {import('express').Response} res
+   * @param {import('express').NextFunction} next
+   */
+  const getMyBids = async (req, res, next) => {
+    const userId = req.user.id;
+    const { limit, cursor } = req.query;
+
+    try {
+      const conditions = ['b.bidder_id = $1'];
+      const params = [userId];
+
+      if (cursor !== undefined) {
+        params.push(cursor);
+        conditions.push(`b.id < $${params.length}`);
+      }
+
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+      params.push(limit + 1);
+      const limitParamIndex = params.length;
+
+      const result = await db.query(
+        `SELECT 
+          b.id,
+          b.auction_id as "auctionId",
+          b.bidder_id as "bidderId",
+          b.amount,
+          b.created_at as "createdAt",
+          a.title,
+          a.current_price as "currentPrice",
+          (b.amount = a.current_price) as "isWinning"
+        FROM bids b
+        JOIN auctions a ON b.auction_id = a.id
+        ${whereClause}
+        ORDER BY b.id DESC
+        LIMIT $${limitParamIndex}`,
+        params
+      );
+
+      const hasMore = result.rows.length > limit;
+      const rows = hasMore ? result.rows.slice(0, limit) : result.rows;
+
+      const bids = rows.map((row) => ({
+        id: Number(row.id),
+        auctionId: Number(row.auctionId ?? row.auction_id),
+        bidderId: Number(row.bidderId ?? row.bidder_id),
+        amount: Number(row.amount),
+        createdAt: row.createdAt ?? row.created_at,
+        title: row.title,
+        currentPrice: Number(row.currentPrice ?? row.current_price),
+        isWinning: Boolean(row.isWinning ?? row.is_winning),
+      }));
+
+      const nextCursor = hasMore ? bids[bids.length - 1].id : null;
+
+      return res.status(200).json({
+        bids,
+        pagination: {
+          nextCursor,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  return {
+    registerUser,
+    loginUser,
+    getCurrentUser,
+    getUserProfile,
+    updateProfile,
+    changePassword,
+    getMyAuctions,
+    getMyBids,
+  };
 }
 
 export default createUserController;
