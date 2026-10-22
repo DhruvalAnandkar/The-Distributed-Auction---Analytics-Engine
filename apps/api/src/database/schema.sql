@@ -39,3 +39,13 @@ CREATE TABLE IF NOT EXISTS bids(
 
 CREATE INDEX IF NOT EXISTS idx_bids_auction_amount ON bids(auction_id, amount DESC);
 CREATE INDEX IF NOT EXISTS idx_bids_bidder_id ON bids(bidder_id, id DESC);
+
+-- Core WATCHLIST table
+CREATE TABLE IF NOT EXISTS watchlist(
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    auction_id INTEGER REFERENCES auctions(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, auction_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_watchlist_user_created ON watchlist(user_id, created_at DESC);
