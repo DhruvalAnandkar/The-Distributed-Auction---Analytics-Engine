@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS bids(
 
 CREATE INDEX IF NOT EXISTS idx_bids_auction_amount ON bids(auction_id, amount DESC);
 CREATE INDEX IF NOT EXISTS idx_bids_bidder_id ON bids(bidder_id, id DESC);
+CREATE INDEX IF NOT EXISTS idx_bids_created_at ON bids(created_at);
 
 -- Core WATCHLIST table
 CREATE TABLE IF NOT EXISTS watchlist(
