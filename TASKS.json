@@ -701,9 +701,9 @@
         "apps/api/src/**",
         "apps/api/test/**"
       ],
-      "status": "pending",
-      "attempts": 2,
-      "lastError": "Test suite failed: 1 failing of 199 tests (exit 1)."
+      "status": "blocked",
+      "attempts": 3,
+      "lastError": "Test suite failed: 2 failing of 198 tests (exit 1)."
     }
   ]
 }
