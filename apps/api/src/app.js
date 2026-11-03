@@ -10,6 +10,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { requestContext } from './middleware/requestContext.js';
 import { securityHeaders } from './middleware/securityHeaders.js';
 import { createCors } from './middleware/cors.js';
+import { createMetrics, checkMetricsAuth } from './services/metrics.js';
 
 /**
  * Builds the Express application.
@@ -21,6 +22,8 @@ import { createCors } from './middleware/cors.js';
  * @param {string | number} [deps.bodyLimit='100kb'] - Request body size limit for express.json.
  * @param {string | string[] | Set<string>} [deps.corsOrigins] - Allowed origins for CORS.
  * @param {string | string[] | Set<string>} [deps.origins] - Alias for corsOrigins.
+ * @param {Function} [deps.now] - Custom time provider function for metrics.
+ * @param {Object} [deps.metrics] - Custom metrics collector instance.
  * @returns {import('express').Express}
  */
 export function createApp({
@@ -29,8 +32,11 @@ export function createApp({
   bodyLimit = '100kb',
   corsOrigins,
   origins,
+  now,
+  metrics: injectedMetrics,
 } = {}) {
   const app = express();
+  const metrics = injectedMetrics || createMetrics({ now });
 
   app.disable('x-powered-by');
 
@@ -38,6 +44,15 @@ export function createApp({
   app.use(createCors({ origins: origins !== undefined ? origins : corsOrigins }));
   app.use(express.json({ limit: bodyLimit }));
   app.use(requestContext);
+  app.use(metrics.middleware);
+
+  app.get('/metrics', (req, res) => {
+    if (!checkMetricsAuth(req, res)) {
+      return;
+    }
+    res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+    res.send(metrics.toPrometheus());
+  });
 
   app.use('/api/users', createUserRouter({ db }));
   app.use('/api/auctions', createAuctionRouter({ db }));

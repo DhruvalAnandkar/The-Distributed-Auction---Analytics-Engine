@@ -700,7 +700,14 @@
         "apps/api/test/**"
       ],
       "dependsOn": [],
-      "status": "pending"
+      "status": "done",
+      "completedAt": "2026-11-03T16:51:44.090Z",
+      "attempts": 1,
+      "files": [
+        "apps/api/src/services/metrics.js",
+        "apps/api/src/app.js",
+        "apps/api/test/metrics.test.js"
+      ]
     },
     {
       "id": "anti-sniping",
