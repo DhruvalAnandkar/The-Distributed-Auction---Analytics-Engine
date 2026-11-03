@@ -278,6 +278,7 @@ export function createAuctionController({ db }) {
   /**
    * POST /api/auctions/:id/bids
    * Places a bid on an active auction using row-level locking.
+   * Applies anti-sniping window extension if bid is placed in the last 2 minutes.
    *
    * @param {import('express').Request} req
    * @param {import('express').Response} res
@@ -299,7 +300,8 @@ export function createAuctionController({ db }) {
           current_price as "currentPrice",
           status,
           seller_id as "sellerId",
-          ends_at as "endsAt"
+          ends_at as "endsAt",
+          COALESCE(original_ends_at, ends_at) as "originalEndsAt"
         FROM auctions
         WHERE id = $1
         FOR UPDATE`,
@@ -318,6 +320,8 @@ export function createAuctionController({ db }) {
 
       const now = new Date();
       const endsAt = new Date(auction.endsAt);
+      const rawOriginalEndsAt = auction.originalEndsAt ?? auction.original_ends_at ?? auction.endsAt;
+      const originalEndsAt = new Date(rawOriginalEndsAt);
 
       if (auction.status !== 'ACTIVE' || endsAt <= now) {
         throw new AppError(409, 'Auction is not active or has ended');
@@ -349,14 +353,44 @@ export function createAuctionController({ db }) {
         [id, userId, amount]
       );
 
-      await client.query(
-        `UPDATE auctions SET current_price = $1 WHERE id = $2`,
-        [amount, id]
-      );
+      const twoMinutesMs = 2 * 60 * 1000;
+      const thirtyMinutesMs = 30 * 60 * 1000;
+      const timeRemainingMs = endsAt.getTime() - now.getTime();
+      const isAntiSnipingWindow = timeRemainingMs <= twoMinutesMs;
+
+      let updatedEndsAt = endsAt;
+
+      if (isAntiSnipingWindow) {
+        const candidateEndsAtMs = now.getTime() + twoMinutesMs;
+        const maxEndsAtMs = originalEndsAt.getTime() + thirtyMinutesMs;
+        const newEndsAtMs = Math.min(candidateEndsAtMs, maxEndsAtMs);
+
+        if (newEndsAtMs > endsAt.getTime()) {
+          updatedEndsAt = new Date(newEndsAtMs);
+        }
+
+        await client.query(
+          `UPDATE auctions SET current_price = $1, ends_at = $3, original_ends_at = COALESCE(original_ends_at, $4) WHERE id = $2`,
+          [amount, id, updatedEndsAt.toISOString(), originalEndsAt.toISOString()]
+        );
+      } else {
+        await client.query(
+          `UPDATE auctions SET current_price = $1 WHERE id = $2`,
+          [amount, id]
+        );
+      }
 
       await client.query('COMMIT');
 
       const bid = bidResult.rows[0];
+
+      const auctionResponse = {
+        currentPrice: Number(amount),
+      };
+
+      if (isAntiSnipingWindow) {
+        auctionResponse.endsAt = updatedEndsAt.toISOString();
+      }
 
       return res.status(201).json({
         bid: {
@@ -366,9 +400,7 @@ export function createAuctionController({ db }) {
           amount: Number(bid.amount),
           createdAt: bid.createdAt,
         },
-        auction: {
-          currentPrice: Number(amount),
-        },
+        auction: auctionResponse,
       });
     } catch (err) {
       if (client) {
