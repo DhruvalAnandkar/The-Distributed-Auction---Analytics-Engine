@@ -34,6 +34,7 @@ import {
   pickNextTask,
 } from './policy.mjs';
 import { checkSyntax, runTests, failureExcerpt } from './verify.mjs';
+import { selectContext } from './context.mjs';
 
 const ROOT = process.env.AGENT_REPO_ROOT
   ? path.resolve(process.env.AGENT_REPO_ROOT)
@@ -45,7 +46,7 @@ const API_PKG = path.join(ROOT, 'apps', 'api', 'package.json');
 
 const MAX_ATTEMPTS = Number(process.env.AGENT_MAX_ATTEMPTS || 3);
 const MAX_RUN_FAILURES = Number(process.env.AGENT_MAX_RUN_FAILURES || 3);
-const CONTEXT_CHAR_BUDGET = 160_000; // keeps prompts well inside free-tier token limits
+const CONTEXT_CHAR_BUDGET = Number(process.env.AGENT_CONTEXT_CHARS || 220_000);
 const TASK_ID_RE = /^[a-z0-9][a-z0-9-]{1,48}$/;
 
 // ---------- small helpers ----------
@@ -112,22 +113,12 @@ function installTaskDependencies(task) {
 // ---------- prompt ----------
 
 function buildContext(task) {
-  const files = [
-    ...walk(path.join(ROOT, 'apps', 'api', 'src')),
-    ...walk(path.join(ROOT, 'apps', 'api', 'test')),
-    API_PKG,
-    ...(task.context || []).map(abs),
-  ];
-  let budget = CONTEXT_CHAR_BUDGET;
-  const parts = [];
-  for (const f of [...new Set(files)]) {
-    if (!fs.existsSync(f)) continue;
-    const content = fs.readFileSync(f, 'utf8');
-    if (content.length > budget) continue;
-    budget -= content.length;
-    parts.push(`<file path="${rel(f)}">\n${content}\n</file>`);
-  }
-  return parts.join('\n\n');
+  const files = [...walk(path.join(ROOT,'apps','api','src')), ...walk(path.join(ROOT,'apps','api','test')), API_PKG, ...(task.context || []).map(abs)]
+    .filter((f) => fs.existsSync(f)).map((f) => ({ path: rel(f), content: fs.readFileSync(f, 'utf8') }));
+  const unique = [...new Map(files.map((f) => [f.path, f])).values()];
+  const { text, included, omitted } = selectContext({ files: unique, task, budget: CONTEXT_CHAR_BUDGET });
+  log(`context: ${included.length} files in full, ${omitted.length} tests summarized`);
+  return text;
 }
 
 function buildPrompt({ task, tasks, previousFailure }) {
@@ -360,6 +351,18 @@ async function main() {
   }
 
   if (!task) {
+    if (!requested) {
+      const hasPending = tasks.some((t) => t.status === 'pending');
+      const blocked = tasks.filter((t) => t.status === 'blocked');
+      if (!hasPending || blocked.length) {
+        const message = blocked.length
+          ? blocked.map((t) => `${t.id}: ${t.lastError || '(no lastError)'}`).join('; ')
+          : 'Backlog complete';
+        console.log(`::error title=Autonomous Engineer needs attention::${message}`);
+        setOutput({ status: 'idle' });
+        return 1;
+      }
+    }
     log(requested ? `task "${requested}" not found` : 'no runnable task — backlog empty, blocked, or awaiting review');
     setOutput({ status: 'idle' });
     return 0;

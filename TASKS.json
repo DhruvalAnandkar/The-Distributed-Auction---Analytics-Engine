@@ -686,24 +686,309 @@
       ]
     },
     {
-      "id": "openapi-spec",
-      "title": "Serve an OpenAPI 3.1 description of the API",
-      "description": "Add src/docs/openapi.js exporting a plain-object OpenAPI 3.1 document describing every route currently mounted in createApp (paths, methods, auth requirement via bearerAuth, request bodies, main responses), and serve it at GET /api/openapi.json. Add a test that walks the Express router stack and fails if any mounted route is missing from the document.",
+      "id": "metrics-endpoint",
+      "title": "Prometheus metrics endpoint",
+      "description": "Add createMetrics({ now }) in src/services/metrics.js and serve Prometheus metrics at GET /metrics (no dependencies). Track a request counter and a duration histogram labelled by route pattern (not raw ids). If METRICS_TOKEN is set, require it as a Bearer token compared with crypto.timingSafeEqual.",
       "acceptanceCriteria": [
-        "GET /api/openapi.json returns valid JSON with openapi: '3.1.0'",
-        "Every mounted route+method appears in paths (enforced by a test)",
-        "Protected routes declare bearerAuth security"
-      ],
-      "dependsOn": [
-        "auction-close"
+        "GET /metrics returns Prometheus text with a request counter and duration histogram",
+        "Histogram labels use route patterns, not raw path ids",
+        "When METRICS_TOKEN is set, missing/wrong Bearer tokens are rejected via crypto.timingSafeEqual",
+        "createMetrics({ now }) is injectable for deterministic tests"
       ],
       "scope": [
         "apps/api/src/**",
         "apps/api/test/**"
       ],
-      "status": "blocked",
-      "attempts": 3,
-      "lastError": "Test suite failed: 2 failing of 198 tests (exit 1)."
+      "dependsOn": [],
+      "status": "pending"
+    },
+    {
+      "id": "anti-sniping",
+      "title": "Anti-sniping bid window extension",
+      "description": "Bids placed in the last 2 minutes extend ends_at to NOW()+2min inside the bid transaction, capped at 30 minutes past a new original_ends_at column (ADD COLUMN IF NOT EXISTS). Return endsAt in the bid response.",
+      "acceptanceCriteria": [
+        "A bid in the last 2 minutes extends ends_at to NOW()+2 minutes inside the same transaction",
+        "Extension is capped at 30 minutes past original_ends_at (ADD COLUMN IF NOT EXISTS)",
+        "Successful bid responses include endsAt",
+        "Bids outside the final 2 minutes do not change ends_at"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [],
+      "status": "pending"
+    },
+    {
+      "id": "idempotency-keys",
+      "title": "Idempotency-Key support for create auction and place bid",
+      "description": "Optional Idempotency-Key header on POST /api/auctions and POST /api/auctions/:id/bids. Table idempotency_keys(user_id, key, request_hash, status_code, response_body JSONB, created_at). Same key + same body replays the stored response with header Idempotent-Replayed: true; same key + different body returns 409; keys expire after 24h.",
+      "acceptanceCriteria": [
+        "Same Idempotency-Key + same body replays the stored response with Idempotent-Replayed: true",
+        "Same key + different body returns 409",
+        "Keys older than 24h are treated as expired",
+        "Works on POST /api/auctions and POST /api/auctions/:id/bids"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [],
+      "status": "pending"
+    },
+    {
+      "id": "refresh-tokens",
+      "title": "Refresh token rotation and logout",
+      "description": "Login also returns a refreshToken. Store only its SHA-256 hash in refresh_tokens(id, user_id, token_hash UNIQUE, family_id, expires_at, revoked_at). POST /api/users/token/refresh rotates it; reuse of a revoked token revokes the whole family and returns 401. POST /api/users/logout revokes. Use a transaction with FOR UPDATE.",
+      "acceptanceCriteria": [
+        "Login returns a refreshToken and only its SHA-256 hash is stored",
+        "POST /api/users/token/refresh rotates the token in a FOR UPDATE transaction",
+        "Reuse of a revoked token revokes the whole family and returns 401",
+        "POST /api/users/logout revokes the current refresh token"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [],
+      "status": "pending"
+    },
+    {
+      "id": "account-lockout",
+      "title": "Account lockout after failed logins",
+      "description": "After 5 failed logins, lock the account for 15 minutes (users.failed_login_count, users.locked_until). Same generic 401 plus Retry-After; a successful login resets the count; increment atomically in SQL.",
+      "acceptanceCriteria": [
+        "Five failed logins lock the account for 15 minutes",
+        "Locked login attempts return the same generic 401 plus Retry-After",
+        "A successful login resets failed_login_count",
+        "failed_login_count is incremented atomically in SQL"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [
+        "refresh-tokens"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "outbid-notifications",
+      "title": "Outbid notifications inbox",
+      "description": "Add a notifications table. Inside the bid transaction, notify the previous highest bidder (OUTBID). Add GET /api/users/me/notifications (keyset pagination, unreadOnly filter) and POST /api/users/me/notifications/:id/read (own notifications only).",
+      "acceptanceCriteria": [
+        "Placing a bid notifies the previous highest bidder with type OUTBID inside the same transaction",
+        "GET /api/users/me/notifications supports keyset pagination and unreadOnly",
+        "POST /api/users/me/notifications/:id/read marks only the caller's own notifications",
+        "No cross-user notification leakage"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [
+        "anti-sniping"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "auction-etag",
+      "title": "ETag support for GET /api/auctions/:id",
+      "description": "GET /api/auctions/:id sets an ETag (SHA-256 of the body) and returns 304 when If-None-Match matches. Set Cache-Control: private, max-age=0, must-revalidate.",
+      "acceptanceCriteria": [
+        "GET /api/auctions/:id returns an ETag that is the SHA-256 of the body",
+        "Matching If-None-Match returns 304",
+        "Cache-Control is private, max-age=0, must-revalidate",
+        "Changed bodies produce a different ETag"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [],
+      "status": "pending"
+    },
+    {
+      "id": "auction-cache",
+      "title": "In-memory LRU cache for auction reads",
+      "description": "Add src/services/cache.js with createCache({ ttlMs, maxEntries, now }) as an LRU on Map. Read-through for GET /api/auctions/:id; invalidate on bid, update and close; injected via createApp({ cache }).",
+      "acceptanceCriteria": [
+        "createCache({ ttlMs, maxEntries, now }) behaves as an LRU on Map",
+        "GET /api/auctions/:id is a read-through cache hit when warm",
+        "Bid, update and close invalidate the cached auction",
+        "Cache is injectable via createApp({ cache })"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [
+        "auction-etag"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "event-bus-sse",
+      "title": "Server-Sent Events for auction bids",
+      "description": "Add src/services/eventBus.js over node:events. After a bid COMMITs, publish auction:<id>. Add GET /api/auctions/:id/events as a Server-Sent Events stream (ready event, bid events, 25s ping) that cleans up its listener and timer on close. Test on an ephemeral port with http.get.",
+      "acceptanceCriteria": [
+        "After a bid COMMITs, auction:<id> is published on the event bus",
+        "GET /api/auctions/:id/events streams ready, bid events and a 25s ping",
+        "Listener and ping timer are cleaned up on connection close",
+        "Covered by a test using an ephemeral port with http.get"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [
+        "outbid-notifications"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "outbox-events",
+      "title": "Transactional outbox for domain events",
+      "description": "Add a domain_events outbox table. Write BidPlaced and AuctionClosed events in the same transactions. src/services/outbox.js provides claimBatch (FOR UPDATE SKIP LOCKED) and markPublished.",
+      "acceptanceCriteria": [
+        "BidPlaced is written in the same transaction as the bid",
+        "AuctionClosed is written in the same transaction as closing",
+        "claimBatch uses FOR UPDATE SKIP LOCKED",
+        "markPublished updates claimed events after publish"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [
+        "event-bus-sse"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "reserve-price",
+      "title": "Auction reserve price",
+      "description": "Add auctions.reserve_price (>= start_price). Only the seller ever sees the amount; everyone else gets reserveMet. Closing below the reserve sets winner null and reserveMet false.",
+      "acceptanceCriteria": [
+        "reserve_price must be >= start_price",
+        "Only the seller sees the reserve amount; others see reserveMet",
+        "Closing below the reserve sets winner null and reserveMet false",
+        "Closing at or above the reserve awards the highest bidder"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [
+        "outbox-events"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "buy-now",
+      "title": "Buy-now purchase path",
+      "description": "Add auctions.buy_now_price. POST /api/auctions/:id/buy-now in a FOR UPDATE transaction: inserts a bid at that price and closes the auction. 403 for the seller, 409 if closed or expired.",
+      "acceptanceCriteria": [
+        "POST /api/auctions/:id/buy-now inserts a bid at buy_now_price and closes the auction in one FOR UPDATE transaction",
+        "Seller receives 403",
+        "Closed or expired auctions return 409",
+        "Successful buy-now awards the buyer as winner"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [
+        "reserve-price"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "price-history",
+      "title": "Auction price history buckets",
+      "description": "GET /api/auctions/:id/price-history?bucket=minute|hour|day using date_trunc through a whitelist. Returns { auctionId, bucket, points: [{ bucketStart, maxAmount, bidCount }] }.",
+      "acceptanceCriteria": [
+        "GET /api/auctions/:id/price-history accepts bucket=minute|hour|day only",
+        "SQL uses date_trunc through a whitelist",
+        "Response shape is { auctionId, bucket, points: [{ bucketStart, maxAmount, bidCount }] }",
+        "Invalid bucket values return 400"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [],
+      "status": "pending"
+    },
+    {
+      "id": "user-roles",
+      "title": "User roles and admin user listing",
+      "description": "Add users.role ('user'|'admin', default 'user'). requireRole('admin') reads the role from the DB, never from the JWT. Add GET /api/admin/users with keyset pagination and no password hashes. Keep the X-Admin-Token endpoint working.",
+      "acceptanceCriteria": [
+        "users.role is 'user' or 'admin' with default 'user'",
+        "requireRole('admin') loads the role from the DB, never from the JWT",
+        "GET /api/admin/users supports keyset pagination and omits password hashes",
+        "Existing X-Admin-Token admin endpoint still works"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [],
+      "status": "pending"
+    },
+    {
+      "id": "seller-ratings",
+      "title": "Seller ratings after closed auctions",
+      "description": "Add seller_ratings table. POST /api/auctions/:id/rating, only by the winner of a CLOSED auction, once (409 on repeat), score 1-5. GET /api/users/:id adds ratingAverage and ratingCount.",
+      "acceptanceCriteria": [
+        "Only the winner of a CLOSED auction can POST /api/auctions/:id/rating",
+        "Repeat ratings return 409",
+        "Score must be 1-5",
+        "GET /api/users/:id includes ratingAverage and ratingCount"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "dependsOn": [
+        "buy-now"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "openapi-spec",
+      "title": "Serve an OpenAPI 3.1 description of the API",
+      "description": "Add src/docs/openapi.js exporting a plain-object OpenAPI 3.1 document and serve it at GET /api/openapi.json (public). Read every file in src/routes and src/app.js and describe EVERY route they register, including routes added by other tasks. Use {param} path syntax. Declare components.securitySchemes.bearerAuth (http bearer JWT) and set security on routes that use requireAuth; X-Admin-Token routes declare an apiKey scheme. Testing: do NOT inspect Express router internals. In apps/api/test/openapi.test.js hard-code the full list of method+path pairs, then (1) assert each exists in the document, and (2) for each one send a real request through createApp({ db: createFakeDb([]) }) with sample values (id 1) and assert the response is NOT the generic { error: 'Not found' } 404 from the notFound handler. 400/401/403/other 404 messages are fine.",
+      "acceptanceCriteria": [
+        "GET /api/openapi.json returns JSON with openapi: '3.1.0'",
+        "Every registered route+method appears in paths (hard-coded list checked by a test)",
+        "Each listed route is actually mounted (not the generic 'Not found' 404)",
+        "Routes using requireAuth declare bearerAuth security"
+      ],
+      "dependsOn": [
+        "metrics-endpoint",
+        "anti-sniping",
+        "idempotency-keys",
+        "refresh-tokens",
+        "account-lockout",
+        "outbid-notifications",
+        "auction-etag",
+        "auction-cache",
+        "event-bus-sse",
+        "outbox-events",
+        "reserve-price",
+        "buy-now",
+        "price-history",
+        "user-roles",
+        "seller-ratings"
+      ],
+      "scope": [
+        "apps/api/src/**",
+        "apps/api/test/**"
+      ],
+      "status": "pending",
+      "attempts": 0
     }
   ]
 }
