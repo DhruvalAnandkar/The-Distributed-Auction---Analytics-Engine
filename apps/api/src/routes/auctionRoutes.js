@@ -11,6 +11,7 @@ import {
 } from '../validators/auctionValidators.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { createRateLimiter } from '../middleware/rateLimit.js';
+import { createIdempotencyMiddleware } from '../middleware/idempotency.js';
 
 /**
  * Builds the /api/auctions router.
@@ -22,6 +23,7 @@ import { createRateLimiter } from '../middleware/rateLimit.js';
 export function createAuctionRouter({ db }) {
   const router = express.Router();
   const auctions = createAuctionController({ db });
+  const idempotency = createIdempotencyMiddleware({ db });
 
   const bidRateLimiter = createRateLimiter({
     capacity: 10,
@@ -44,7 +46,13 @@ export function createAuctionRouter({ db }) {
   );
 
   // POST /api/auctions
-  router.post('/', requireAuth, validate(createAuctionSchema), auctions.createAuction);
+  router.post(
+    '/',
+    requireAuth,
+    idempotency,
+    validate(createAuctionSchema),
+    auctions.createAuction
+  );
 
   // PATCH /api/auctions/:id
   router.patch(
@@ -60,6 +68,7 @@ export function createAuctionRouter({ db }) {
     '/:id/bids',
     requireAuth,
     bidRateLimiter,
+    idempotency,
     validate(auctionIdParamSchema, 'params'),
     validate(placeBidSchema, 'body'),
     auctions.placeBid
