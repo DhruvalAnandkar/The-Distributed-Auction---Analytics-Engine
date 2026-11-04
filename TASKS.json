@@ -748,7 +748,15 @@
         "apps/api/test/**"
       ],
       "dependsOn": [],
-      "status": "pending"
+      "status": "done",
+      "completedAt": "2026-11-04T03:14:10.249Z",
+      "attempts": 1,
+      "files": [
+        "apps/api/src/database/schema.sql",
+        "apps/api/src/middleware/idempotency.js",
+        "apps/api/src/routes/auctionRoutes.js",
+        "apps/api/test/idempotency.test.js"
+      ]
     },
     {
       "id": "refresh-tokens",

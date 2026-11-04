@@ -53,3 +53,16 @@ CREATE TABLE IF NOT EXISTS watchlist(
 );
 
 CREATE INDEX IF NOT EXISTS idx_watchlist_user_created ON watchlist(user_id, created_at DESC);
+
+-- Core IDEMPOTENCY_KEYS table
+CREATE TABLE IF NOT EXISTS idempotency_keys(
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    key VARCHAR(255) NOT NULL,
+    request_hash VARCHAR(64) NOT NULL,
+    status_code INTEGER NOT NULL,
+    response_body JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_idempotency_keys_created ON idempotency_keys(created_at);
