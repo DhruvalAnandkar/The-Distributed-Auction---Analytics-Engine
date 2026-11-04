@@ -773,7 +773,9 @@
         "apps/api/test/**"
       ],
       "dependsOn": [],
-      "status": "pending"
+      "status": "pending",
+      "attempts": 1,
+      "lastError": "Expected property name or '}' in JSON at position 7688 (line 14 column 7)"
     },
     {
       "id": "account-lockout",
