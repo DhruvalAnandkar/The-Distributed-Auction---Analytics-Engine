@@ -9,6 +9,7 @@ import {
   changePasswordSchema,
   myAuctionsQuerySchema,
   myBidsQuerySchema,
+  refreshTokenSchema,
 } from '../validators/userValidators.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { createRateLimiter } from '../middleware/rateLimit.js';
@@ -17,7 +18,7 @@ import { createRateLimiter } from '../middleware/rateLimit.js';
  * Builds the /api/users router.
  *
  * @param {Object} deps
- * @param {{ query: Function }} deps.db - node-postgres compatible query interface.
+ * @param {{ query: Function, connect?: Function }} deps.db - node-postgres compatible query interface.
  * @returns {import('express').Router}
  */
 export function createUserRouter({ db }) {
@@ -35,6 +36,12 @@ export function createUserRouter({ db }) {
 
   // POST /api/users/login
   router.post('/login', loginRateLimiter, validate(loginSchema), users.loginUser);
+
+  // POST /api/users/token/refresh
+  router.post('/token/refresh', validate(refreshTokenSchema), users.refreshToken);
+
+  // POST /api/users/logout
+  router.post('/logout', validate(refreshTokenSchema), users.logoutUser);
 
   // GET /api/users/me
   router.get('/me', requireAuth, users.getCurrentUser);

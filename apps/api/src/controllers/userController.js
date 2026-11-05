@@ -1,5 +1,10 @@
 import bcrypt from 'bcryptjs';
-import { generateToken } from '../services/tokenService.js';
+import crypto from 'node:crypto';
+import {
+  generateToken,
+  generateRefreshToken,
+  hashToken,
+} from '../services/tokenService.js';
 import AppError from '../utils/AppError.js';
 
 /**
@@ -34,7 +39,7 @@ import AppError from '../utils/AppError.js';
  * records queries and returns canned rows, so handlers are tested in isolation.
  *
  * @param {Object} deps
- * @param {{ query: Function }} deps.db - node-postgres compatible query interface.
+ * @param {{ query: Function, connect?: Function }} deps.db - node-postgres compatible query interface.
  */
 export function createUserController({ db }) {
   /**
@@ -83,8 +88,9 @@ export function createUserController({ db }) {
   /**
    * POST /api/users/login
    *
-   * Verifies user credentials, generates an HS256 JWT, and returns
-   * the token along with the user profile (omitting password hash).
+   * Verifies user credentials, generates an HS256 JWT and a refreshToken,
+   * stores the SHA-256 hash in refresh_tokens, and returns
+   * the token and refreshToken along with the user profile (omitting password hash).
    *
    * @param {import('express').Request<{}, {}, UserLoginPayload>} req
    * @param {import('express').Response} res
@@ -111,14 +117,197 @@ export function createUserController({ db }) {
       }
 
       const token = generateToken(user);
+      const rawRefreshToken = generateRefreshToken();
+      const tokenHash = hashToken(rawRefreshToken);
+      const familyId = crypto.randomUUID();
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+      await db.query(
+        `INSERT INTO refresh_tokens (user_id, token_hash, family_id, expires_at)
+        VALUES ($1, $2, $3, $4)`,
+        [user.id, tokenHash, familyId, expiresAt]
+      );
+
       const { password: _, ...userWithoutPassword } = user;
 
       return res.status(200).json({
         token,
+        refreshToken: rawRefreshToken,
         user: userWithoutPassword,
       });
     } catch (err) {
       next(err);
+    }
+  };
+
+  /**
+   * POST /api/users/token/refresh
+   *
+   * Rotates a refresh token inside a FOR UPDATE transaction.
+   * If a revoked token is reused, revokes the entire family and returns 401.
+   *
+   * @param {import('express').Request} req
+   * @param {import('express').Response} res
+   * @param {import('express').NextFunction} next
+   */
+  const refreshToken = async (req, res, next) => {
+    const { refreshToken: rawToken } = req.body;
+    const tokenHash = hashToken(rawToken);
+
+    let client;
+    try {
+      client = await db.connect();
+      await client.query('BEGIN');
+
+      const result = await client.query(
+        `SELECT 
+          id,
+          user_id as "userId",
+          family_id as "familyId",
+          expires_at as "expiresAt",
+          revoked_at as "revokedAt"
+        FROM refresh_tokens
+        WHERE token_hash = $1
+        FOR UPDATE`,
+        [tokenHash]
+      );
+
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return next(new AppError(401, 'Invalid refresh token'));
+      }
+
+      const tokenRecord = result.rows[0];
+      const revokedAt = tokenRecord.revokedAt ?? tokenRecord.revoked_at;
+      const familyId = tokenRecord.familyId ?? tokenRecord.family_id;
+      const userId = tokenRecord.userId ?? tokenRecord.user_id;
+
+      if (revokedAt) {
+        await client.query(
+          `UPDATE refresh_tokens
+           SET revoked_at = NOW()
+           WHERE family_id = $1 AND revoked_at IS NULL`,
+          [familyId]
+        );
+        await client.query('COMMIT');
+        return next(new AppError(401, 'Revoked refresh token reused; session invalidated'));
+      }
+
+      const expiresAt = new Date(tokenRecord.expiresAt ?? tokenRecord.expires_at);
+      if (expiresAt <= new Date()) {
+        await client.query('ROLLBACK');
+        return next(new AppError(401, 'Refresh token expired'));
+      }
+
+      await client.query(
+        `UPDATE refresh_tokens
+         SET revoked_at = NOW()
+         WHERE id = $1`,
+        [tokenRecord.id]
+      );
+
+      const nextRefreshToken = generateRefreshToken();
+      const nextTokenHash = hashToken(nextRefreshToken);
+      const nextExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+      await client.query(
+        `INSERT INTO refresh_tokens (user_id, token_hash, family_id, expires_at)
+         VALUES ($1, $2, $3, $4)`,
+        [userId, nextTokenHash, familyId, nextExpiresAt]
+      );
+
+      const userResult = await client.query(
+        'SELECT id, username FROM users WHERE id = $1',
+        [userId]
+      );
+
+      if (userResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return next(new AppError(401, 'User not found'));
+      }
+
+      const user = userResult.rows[0];
+      const nextAccessToken = generateToken(user);
+
+      await client.query('COMMIT');
+
+      return res.status(200).json({
+        token: nextAccessToken,
+        refreshToken: nextRefreshToken,
+      });
+    } catch (err) {
+      if (client) {
+        try {
+          await client.query('ROLLBACK');
+        } catch (_) {}
+      }
+      next(err);
+    } finally {
+      if (client) {
+        client.release();
+      }
+    }
+  };
+
+  /**
+   * POST /api/users/logout
+   *
+   * Revokes the current refresh token inside a FOR UPDATE transaction.
+   *
+   * @param {import('express').Request} req
+   * @param {import('express').Response} res
+   * @param {import('express').NextFunction} next
+   */
+  const logoutUser = async (req, res, next) => {
+    const { refreshToken: rawToken } = req.body;
+    const tokenHash = hashToken(rawToken);
+
+    let client;
+    try {
+      client = await db.connect();
+      await client.query('BEGIN');
+
+      const result = await client.query(
+        `SELECT id, revoked_at as "revokedAt"
+         FROM refresh_tokens
+         WHERE token_hash = $1
+         FOR UPDATE`,
+        [tokenHash]
+      );
+
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return next(new AppError(401, 'Invalid refresh token'));
+      }
+
+      const tokenRecord = result.rows[0];
+      const revokedAt = tokenRecord.revokedAt ?? tokenRecord.revoked_at;
+
+      if (!revokedAt) {
+        await client.query(
+          `UPDATE refresh_tokens
+           SET revoked_at = NOW()
+           WHERE id = $1`,
+          [tokenRecord.id]
+        );
+      }
+
+      await client.query('COMMIT');
+
+      return res.status(200).json({
+        message: 'Logged out successfully',
+      });
+    } catch (err) {
+      if (client) {
+        try {
+          await client.query('ROLLBACK');
+        } catch (_) {}
+      }
+      next(err);
+    } finally {
+      if (client) {
+        client.release();
+      }
     }
   };
 
@@ -476,6 +665,8 @@ export function createUserController({ db }) {
   return {
     registerUser,
     loginUser,
+    refreshToken,
+    logoutUser,
     getCurrentUser,
     getUserProfile,
     updateProfile,

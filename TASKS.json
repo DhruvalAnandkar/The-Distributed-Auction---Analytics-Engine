@@ -773,9 +773,17 @@
         "apps/api/test/**"
       ],
       "dependsOn": [],
-      "status": "pending",
-      "attempts": 1,
-      "lastError": "Expected property name or '}' in JSON at position 7688 (line 14 column 7)"
+      "status": "done",
+      "attempts": 2,
+      "completedAt": "2026-11-05T03:57:32.864Z",
+      "files": [
+        "apps/api/src/database/schema.sql",
+        "apps/api/src/services/tokenService.js",
+        "apps/api/src/validators/userValidators.js",
+        "apps/api/src/controllers/userController.js",
+        "apps/api/src/routes/userRoutes.js",
+        "apps/api/test/auth.refreshTokens.test.js"
+      ]
     },
     {
       "id": "account-lockout",
