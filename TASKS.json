@@ -828,7 +828,9 @@
       "dependsOn": [
         "anti-sniping"
       ],
-      "status": "pending"
+      "status": "pending",
+      "attempts": 1,
+      "lastError": "Bad escaped character in JSON at position 22264 (line 15 column 12785)"
     },
     {
       "id": "auction-etag",
