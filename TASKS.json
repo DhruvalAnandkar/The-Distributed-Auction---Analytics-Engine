@@ -802,9 +802,14 @@
       "dependsOn": [
         "refresh-tokens"
       ],
-      "status": "pending",
-      "attempts": 1,
-      "lastError": "Bad control character in string literal in JSON at position 27089 (line 15 column 204)"
+      "status": "done",
+      "attempts": 2,
+      "completedAt": "2026-11-05T19:12:03.568Z",
+      "files": [
+        "apps/api/src/database/schema.sql",
+        "apps/api/src/controllers/userController.js",
+        "apps/api/test/accountLockout.test.js"
+      ]
     },
     {
       "id": "outbid-notifications",

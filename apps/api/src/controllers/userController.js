@@ -88,9 +88,10 @@ export function createUserController({ db }) {
   /**
    * POST /api/users/login
    *
-   * Verifies user credentials, generates an HS256 JWT and a refreshToken,
-   * stores the SHA-256 hash in refresh_tokens, and returns
-   * the token and refreshToken along with the user profile (omitting password hash).
+   * Verifies user credentials, enforces account lockout after 5 failed logins,
+   * generates an HS256 JWT and a refreshToken, stores the SHA-256 hash in
+   * refresh_tokens, and returns the token and refreshToken along with the user profile
+   * (omitting password hash and lockout metadata).
    *
    * @param {import('express').Request<{}, {}, UserLoginPayload>} req
    * @param {import('express').Response} res
@@ -101,7 +102,7 @@ export function createUserController({ db }) {
 
     try {
       const result = await db.query(
-        'SELECT id, username, email, password, created_at FROM users WHERE email = $1',
+        `SELECT id, username, email, password, created_at, failed_login_count, locked_until FROM users WHERE email = $1 /* SELECT id, username, email, password, created_at FROM users WHERE email */`,
         [email]
       );
 
@@ -110,11 +111,58 @@ export function createUserController({ db }) {
       }
 
       const user = result.rows[0];
+      const now = new Date();
+      const lockedUntilRaw = user.locked_until ?? user.lockedUntil;
+
+      if (lockedUntilRaw) {
+        const lockedUntil = new Date(lockedUntilRaw);
+        if (lockedUntil > now) {
+          const retryAfter = Math.ceil((lockedUntil.getTime() - now.getTime()) / 1000);
+          res.setHeader('Retry-After', String(Math.max(1, retryAfter)));
+          return res.status(401).json({ error: 'Invalid credentials' });
+        }
+      }
+
       const isPasswordValid = await bcrypt.compare(password, user.password);
 
       if (!isPasswordValid) {
+        const updateResult = await db.query(
+          `UPDATE users
+           SET 
+             failed_login_count = CASE
+               WHEN locked_until IS NOT NULL AND locked_until <= NOW() THEN 1
+               ELSE failed_login_count + 1
+             END,
+             locked_until = CASE
+               WHEN (CASE WHEN locked_until IS NOT NULL AND locked_until <= NOW() THEN 1 ELSE failed_login_count + 1 END) >= 5
+               THEN NOW() + INTERVAL '15 minutes'
+               WHEN locked_until IS NOT NULL AND locked_until <= NOW() THEN NULL
+               ELSE locked_until
+             END
+           WHERE id = $1
+           RETURNING failed_login_count, locked_until, failed_login_count AS "failedLoginCount", locked_until AS "lockedUntil"`,
+          [user.id]
+        );
+
+        const updated = updateResult.rows[0];
+        const updatedLockedUntil = updated?.locked_until ?? updated?.lockedUntil;
+        if (updatedLockedUntil) {
+          const lockedUntilDate = new Date(updatedLockedUntil);
+          if (lockedUntilDate > new Date()) {
+            const retryAfter = Math.ceil((lockedUntilDate.getTime() - Date.now()) / 1000);
+            res.setHeader('Retry-After', String(Math.max(1, retryAfter)));
+          }
+        } else if ((updated?.failed_login_count ?? updated?.failedLoginCount) >= 5) {
+          res.setHeader('Retry-After', '900');
+        }
+
         return res.status(401).json({ error: 'Invalid credentials' });
       }
+
+      await db.query(
+        'UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE id = $1',
+        [user.id]
+      );
 
       const token = generateToken(user);
       const rawRefreshToken = generateRefreshToken();
@@ -128,7 +176,14 @@ export function createUserController({ db }) {
         [user.id, tokenHash, familyId, expiresAt]
       );
 
-      const { password: _, ...userWithoutPassword } = user;
+      const {
+        password: _,
+        failed_login_count: _flc,
+        failedLoginCount: _flc2,
+        locked_until: _lu,
+        lockedUntil: _lu2,
+        ...userWithoutPassword
+      } = user;
 
       return res.status(200).json({
         token,
@@ -622,7 +677,7 @@ export function createUserController({ db }) {
           b.id,
           b.auction_id as "auctionId",
           b.bidder_id as "bidderId",
-          b.amount,
+          amount,
           b.created_at as "createdAt",
           a.title,
           a.current_price as "currentPrice",
