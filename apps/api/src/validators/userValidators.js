@@ -36,6 +36,15 @@ export const loginSchema = z.object({
 });
 
 /**
+ * Zod schema for validating refresh token payloads.
+ */
+export const refreshTokenSchema = z.object({
+  refreshToken: z
+    .string({ required_error: 'Refresh token is required' })
+    .min(1, 'Refresh token is required'),
+});
+
+/**
  * Zod schema for validating user id route parameter.
  */
 export const userIdParamSchema = z.object({
