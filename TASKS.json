@@ -802,7 +802,9 @@
       "dependsOn": [
         "refresh-tokens"
       ],
-      "status": "pending"
+      "status": "pending",
+      "attempts": 1,
+      "lastError": "Bad control character in string literal in JSON at position 27089 (line 15 column 204)"
     },
     {
       "id": "outbid-notifications",
