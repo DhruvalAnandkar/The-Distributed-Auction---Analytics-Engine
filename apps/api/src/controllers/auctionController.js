@@ -338,6 +338,11 @@ export function createAuctionController({ db }) {
         );
       }
 
+      const previousHighestBidResult = await client.query(
+        `SELECT bidder_id as "bidderId" FROM bids WHERE auction_id = $1 ORDER BY amount DESC, id DESC LIMIT 1`,
+        [id]
+      );
+
       const bidResult = await client.query(
         `INSERT INTO bids (
           auction_id,
@@ -352,6 +357,16 @@ export function createAuctionController({ db }) {
           created_at as "createdAt"`,
         [id, userId, amount]
       );
+
+      if (previousHighestBidResult.rows.length > 0) {
+        const prevBidderId = Number(previousHighestBidResult.rows[0].bidderId ?? previousHighestBidResult.rows[0].bidder_id);
+        if (prevBidderId !== Number(userId)) {
+          await client.query(
+            `INSERT INTO notifications (user_id, auction_id, type) VALUES ($1, $2, 'OUTBID')`,
+            [prevBidderId, id]
+          );
+        }
+      }
 
       const twoMinutesMs = 2 * 60 * 1000;
       const thirtyMinutesMs = 30 * 60 * 1000;

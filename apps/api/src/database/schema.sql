@@ -63,6 +63,19 @@ CREATE INDEX IF NOT EXISTS idx_bids_auction_amount ON bids(auction_id, amount DE
 CREATE INDEX IF NOT EXISTS idx_bids_bidder_id ON bids(bidder_id, id DESC);
 CREATE INDEX IF NOT EXISTS idx_bids_created_at ON bids(created_at);
 
+-- Core NOTIFICATIONS table
+CREATE TABLE IF NOT EXISTS notifications(
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    auction_id INTEGER REFERENCES auctions(id) ON DELETE CASCADE,
+    type VARCHAR(30) NOT NULL CHECK (type IN ('OUTBID')),
+    read BOOLEAN DEFAULT FALSE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(user_id, id DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, read) WHERE read = FALSE;
+
 -- Core WATCHLIST table
 CREATE TABLE IF NOT EXISTS watchlist(
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
