@@ -856,7 +856,13 @@
         "apps/api/test/**"
       ],
       "dependsOn": [],
-      "status": "pending"
+      "status": "done",
+      "completedAt": "2026-11-06T18:25:46.108Z",
+      "attempts": 1,
+      "files": [
+        "apps/api/src/controllers/auctionController.js",
+        "apps/api/test/auctions.etag.test.js"
+      ]
     },
     {
       "id": "auction-cache",
