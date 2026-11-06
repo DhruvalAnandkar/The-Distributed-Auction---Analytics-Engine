@@ -5,6 +5,7 @@ import { createAuctionRouter } from './routes/auctionRoutes.js';
 import { createAdminRouter } from './routes/adminRoutes.js';
 import { createWatchlistRouter } from './routes/watchlistRoutes.js';
 import { createAnalyticsRouter } from './routes/analyticsRoutes.js';
+import { createNotificationRouter } from './routes/notificationRoutes.js';
 import { notFound } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requestContext } from './middleware/requestContext.js';
@@ -59,6 +60,7 @@ export function createApp({
   app.use('/api/admin', createAdminRouter({ db }));
   app.use('/api/watchlist', createWatchlistRouter({ db }));
   app.use('/api/analytics', createAnalyticsRouter({ db }));
+  app.use('/api/users/me/notifications', createNotificationRouter({ db }));
 
   app.get('/health/ready', async (req, res) => {
     let timer;
