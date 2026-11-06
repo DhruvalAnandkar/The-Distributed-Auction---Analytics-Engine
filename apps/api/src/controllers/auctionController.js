@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import AppError from '../utils/AppError.js';
 import { escapeLike } from '../utils/escapeLike.js';
 
@@ -26,7 +27,7 @@ export function createAuctionController({ db }) {
   /**
    * POST /api/auctions
    * Creates a new auction associated with the authenticated user.
-   *
+ *
    * @param {import('express').Request<{}, {}, AuctionCreationPayload>} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
@@ -73,7 +74,7 @@ export function createAuctionController({ db }) {
    * PATCH /api/auctions/:id
    * Updates an auction's title, description, or endsAt before any bidding.
    * Only allowed for the seller when status is PENDING or ACTIVE and no bids exist.
-   *
+ *
    * @param {import('express').Request<{ id: string }, {}, AuctionUpdatePayload>} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
@@ -169,7 +170,7 @@ export function createAuctionController({ db }) {
   /**
    * GET /api/auctions
    * Lists auctions with optional status filter, case-insensitive title search, and keyset pagination.
-   *
+ *
    * @param {import('express').Request} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
@@ -238,7 +239,9 @@ export function createAuctionController({ db }) {
   /**
    * GET /api/auctions/:id
    * Fetches a single auction by its unique identifier.
-   *
+   * Sets ETag (SHA-256 of the JSON body) and Cache-Control headers.
+   * Returns 304 when If-None-Match header matches the ETag.
+ *
    * @param {import('express').Request} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
@@ -267,9 +270,32 @@ export function createAuctionController({ db }) {
         return next(new AppError(404, 'Auction not found'));
       }
 
-      return res.status(200).json({
+      const body = {
         auction: result.rows[0],
-      });
+      };
+
+      const bodyString = JSON.stringify(body);
+      const hash = crypto.createHash('sha256').update(bodyString).digest('hex');
+      const etag = `"${hash}"`;
+
+      res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+      res.setHeader('ETag', etag);
+
+      const ifNoneMatch = req.headers['if-none-match'];
+      if (ifNoneMatch) {
+        const clientEtags = ifNoneMatch.split(',').map((s) => s.trim());
+        const isMatch = clientEtags.some((clientEtag) => {
+          if (clientEtag === '*') return true;
+          const cleanClient = clientEtag.replace(/^W\//, '').replace(/^"|"$/g, '');
+          return cleanClient === hash;
+        });
+
+        if (isMatch) {
+          return res.status(304).end();
+        }
+      }
+
+      return res.status(200).json(body);
     } catch (err) {
       next(err);
     }
@@ -279,7 +305,7 @@ export function createAuctionController({ db }) {
    * POST /api/auctions/:id/bids
    * Places a bid on an active auction using row-level locking.
    * Applies anti-sniping window extension if bid is placed in the last 2 minutes.
-   *
+ *
    * @param {import('express').Request} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
@@ -436,7 +462,7 @@ export function createAuctionController({ db }) {
   /**
    * GET /api/auctions/:id/bids
    * Fetches bid history for an auction, newest first, with bidder usernames and highest bid.
-   *
+ *
    * @param {import('express').Request} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
