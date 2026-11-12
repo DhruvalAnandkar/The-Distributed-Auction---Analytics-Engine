@@ -881,7 +881,9 @@
       "dependsOn": [
         "auction-etag"
       ],
-      "status": "pending"
+      "status": "pending",
+      "attempts": 1,
+      "lastError": "Bad control character in string literal in JSON at position 31537 (line 35 column 205)"
     },
     {
       "id": "event-bus-sse",
