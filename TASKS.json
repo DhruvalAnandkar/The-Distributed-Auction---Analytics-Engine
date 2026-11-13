@@ -881,9 +881,19 @@
       "dependsOn": [
         "auction-etag"
       ],
-      "status": "pending",
-      "attempts": 2,
-      "lastError": "Test suite failed: 1 failing of 245 tests (exit 1)."
+      "status": "done",
+      "attempts": 3,
+      "completedAt": "2026-11-13T03:40:42.468Z",
+      "files": [
+        "apps/api/src/services/cache.js",
+        "apps/api/src/app.js",
+        "apps/api/src/routes/auctionRoutes.js",
+        "apps/api/src/routes/adminRoutes.js",
+        "apps/api/src/controllers/auctionController.js",
+        "apps/api/src/controllers/adminController.js",
+        "apps/api/src/services/auctionCloser.js",
+        "apps/api/test/auctionCache.test.js"
+      ]
     },
     {
       "id": "event-bus-sse",

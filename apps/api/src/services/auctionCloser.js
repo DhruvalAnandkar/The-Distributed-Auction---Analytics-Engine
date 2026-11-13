@@ -12,9 +12,10 @@
  * @param {Object} deps
  * @param {{ connect: Function }} deps.db - Node-postgres Pool or fakeDb instance.
  * @param {Date | string} [deps.now] - Cutoff timestamp (defaults to current date).
+ * @param {Object} [deps.cache] - LRU cache instance to invalidate closed auctions.
  * @returns {Promise<ClosedAuctionResult[]>}
  */
-export async function closeExpiredAuctions({ db, now } = {}) {
+export async function closeExpiredAuctions({ db, now, cache } = {}) {
   const cutoff = now !== undefined ? now : new Date();
 
   const client = await db.connect();
@@ -76,6 +77,12 @@ export async function closeExpiredAuctions({ db, now } = {}) {
     });
 
     await client.query('COMMIT');
+
+    if (cache) {
+      for (const auctionId of closedAuctionIds) {
+        cache.delete(auctionId);
+      }
+    }
 
     return results;
   } catch (err) {

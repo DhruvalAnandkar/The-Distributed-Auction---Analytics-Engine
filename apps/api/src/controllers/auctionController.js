@@ -22,12 +22,13 @@ import { escapeLike } from '../utils/escapeLike.js';
  *
  * @param {Object} deps
  * @param {{ query: Function, connect?: Function }} deps.db - node-postgres compatible query interface.
+ * @param {Object} [deps.cache] - LRU cache instance for auction reads.
  */
-export function createAuctionController({ db }) {
+export function createAuctionController({ db, cache }) {
   /**
    * POST /api/auctions
    * Creates a new auction associated with the authenticated user.
- *
+   *
    * @param {import('express').Request<{}, {}, AuctionCreationPayload>} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
@@ -74,7 +75,7 @@ export function createAuctionController({ db }) {
    * PATCH /api/auctions/:id
    * Updates an auction's title, description, or endsAt before any bidding.
    * Only allowed for the seller when status is PENDING or ACTIVE and no bids exist.
- *
+   *
    * @param {import('express').Request<{ id: string }, {}, AuctionUpdatePayload>} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
@@ -159,6 +160,10 @@ export function createAuctionController({ db }) {
         return next(new AppError(404, 'Auction not found'));
       }
 
+      if (cache) {
+        cache.delete(Number(id));
+      }
+
       return res.status(200).json({
         auction: updateResult.rows[0],
       });
@@ -170,7 +175,7 @@ export function createAuctionController({ db }) {
   /**
    * GET /api/auctions
    * Lists auctions with optional status filter, case-insensitive title search, and keyset pagination.
- *
+   *
    * @param {import('express').Request} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
@@ -238,40 +243,50 @@ export function createAuctionController({ db }) {
 
   /**
    * GET /api/auctions/:id
-   * Fetches a single auction by its unique identifier.
+   * Fetches a single auction by its unique identifier (read-through cache enabled).
    * Sets ETag (SHA-256 of the JSON body) and Cache-Control headers.
    * Returns 304 when If-None-Match header matches the ETag.
- *
+   *
    * @param {import('express').Request} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
    */
   const getAuctionById = async (req, res, next) => {
     const { id } = req.params;
+    const auctionId = Number(id);
 
     try {
-      const result = await db.query(
-        `SELECT 
-          id,
-          title,
-          description,
-          start_price as "startPrice",
-          current_price as "currentPrice",
-          status,
-          seller_id as "sellerId",
-          ends_at as "endsAt",
-          created_at as "createdAt"
-        FROM auctions
-        WHERE id = $1`,
-        [id]
-      );
+      let auction = cache?.get(auctionId);
 
-      if (result.rows.length === 0) {
-        return next(new AppError(404, 'Auction not found'));
+      if (!auction) {
+        const result = await db.query(
+          `SELECT 
+            id,
+            title,
+            description,
+            start_price as "startPrice",
+            current_price as "currentPrice",
+            status,
+            seller_id as "sellerId",
+            ends_at as "endsAt",
+            created_at as "createdAt"
+          FROM auctions
+          WHERE id = $1`,
+          [id]
+        );
+
+        if (result.rows.length === 0) {
+          return next(new AppError(404, 'Auction not found'));
+        }
+
+        auction = result.rows[0];
+        if (cache) {
+          cache.set(auctionId, auction);
+        }
       }
 
       const body = {
-        auction: result.rows[0],
+        auction,
       };
 
       const bodyString = JSON.stringify(body);
@@ -305,7 +320,7 @@ export function createAuctionController({ db }) {
    * POST /api/auctions/:id/bids
    * Places a bid on an active auction using row-level locking.
    * Applies anti-sniping window extension if bid is placed in the last 2 minutes.
- *
+   *
    * @param {import('express').Request} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
@@ -423,6 +438,10 @@ export function createAuctionController({ db }) {
 
       await client.query('COMMIT');
 
+      if (cache) {
+        cache.delete(Number(id));
+      }
+
       const bid = bidResult.rows[0];
 
       const auctionResponse = {
@@ -462,7 +481,7 @@ export function createAuctionController({ db }) {
   /**
    * GET /api/auctions/:id/bids
    * Fetches bid history for an auction, newest first, with bidder usernames and highest bid.
- *
+   *
    * @param {import('express').Request} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next

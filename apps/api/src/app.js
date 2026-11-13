@@ -12,6 +12,7 @@ import { requestContext } from './middleware/requestContext.js';
 import { securityHeaders } from './middleware/securityHeaders.js';
 import { createCors } from './middleware/cors.js';
 import { createMetrics, checkMetricsAuth } from './services/metrics.js';
+import { createCache } from './services/cache.js';
 
 /**
  * Builds the Express application.
@@ -25,6 +26,7 @@ import { createMetrics, checkMetricsAuth } from './services/metrics.js';
  * @param {string | string[] | Set<string>} [deps.origins] - Alias for corsOrigins.
  * @param {Function} [deps.now] - Custom time provider function for metrics.
  * @param {Object} [deps.metrics] - Custom metrics collector instance.
+ * @param {Object} [deps.cache] - Custom LRU cache instance.
  * @returns {import('express').Express}
  */
 export function createApp({
@@ -35,9 +37,11 @@ export function createApp({
   origins,
   now,
   metrics: injectedMetrics,
+  cache: injectedCache,
 } = {}) {
   const app = express();
   const metrics = injectedMetrics || createMetrics({ now });
+  const cache = injectedCache !== undefined ? injectedCache : createCache();
 
   app.disable('x-powered-by');
 
@@ -56,8 +60,8 @@ export function createApp({
   });
 
   app.use('/api/users', createUserRouter({ db }));
-  app.use('/api/auctions', createAuctionRouter({ db }));
-  app.use('/api/admin', createAdminRouter({ db }));
+  app.use('/api/auctions', createAuctionRouter({ db, cache }));
+  app.use('/api/admin', createAdminRouter({ db, cache }));
   app.use('/api/watchlist', createWatchlistRouter({ db }));
   app.use('/api/analytics', createAnalyticsRouter({ db }));
   app.use('/api/users/me/notifications', createNotificationRouter({ db }));
