@@ -940,7 +940,16 @@
       "dependsOn": [
         "event-bus-sse"
       ],
-      "status": "pending"
+      "status": "done",
+      "completedAt": "2026-11-13T18:48:22.527Z",
+      "attempts": 1,
+      "files": [
+        "apps/api/src/database/schema.sql",
+        "apps/api/src/services/outbox.js",
+        "apps/api/src/controllers/auctionController.js",
+        "apps/api/src/services/auctionCloser.js",
+        "apps/api/test/outbox.test.js"
+      ]
     },
     {
       "id": "reserve-price",
