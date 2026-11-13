@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import AppError from '../utils/AppError.js';
 import { escapeLike } from '../utils/escapeLike.js';
+import defaultEventBus from '../services/eventBus.js';
 
 /**
  * @typedef {Object} AuctionCreationPayload
@@ -23,8 +24,15 @@ import { escapeLike } from '../utils/escapeLike.js';
  * @param {Object} deps
  * @param {{ query: Function, connect?: Function }} deps.db - node-postgres compatible query interface.
  * @param {Object} [deps.cache] - LRU cache instance for auction reads.
+ * @param {import('node:events').EventEmitter} [deps.eventBus] - Event bus for real-time events.
+ * @param {number} [deps.pingIntervalMs=25000] - Ping interval in milliseconds for SSE.
  */
-export function createAuctionController({ db, cache }) {
+export function createAuctionController({
+  db,
+  cache,
+  eventBus = defaultEventBus,
+  pingIntervalMs = 25000,
+}) {
   /**
    * POST /api/auctions
    * Creates a new auction associated with the authenticated user.
@@ -320,6 +328,7 @@ export function createAuctionController({ db, cache }) {
    * POST /api/auctions/:id/bids
    * Places a bid on an active auction using row-level locking.
    * Applies anti-sniping window extension if bid is placed in the last 2 minutes.
+   * Publishes auction:<id> to eventBus after the transaction COMMITs.
    *
    * @param {import('express').Request} req
    * @param {import('express').Response} res
@@ -452,7 +461,7 @@ export function createAuctionController({ db, cache }) {
         auctionResponse.endsAt = updatedEndsAt.toISOString();
       }
 
-      return res.status(201).json({
+      const bidPayload = {
         bid: {
           id: Number(bid.id),
           auctionId: Number(bid.auctionId),
@@ -461,7 +470,13 @@ export function createAuctionController({ db, cache }) {
           createdAt: bid.createdAt,
         },
         auction: auctionResponse,
-      });
+      };
+
+      if (eventBus) {
+        eventBus.emit(`auction:${id}`, bidPayload);
+      }
+
+      return res.status(201).json(bidPayload);
     } catch (err) {
       if (client) {
         try {
@@ -536,7 +551,75 @@ export function createAuctionController({ db, cache }) {
     }
   };
 
-  return { createAuction, updateAuction, listAuctions, getAuctionById, placeBid, getBidHistory };
+  /**
+   * GET /api/auctions/:id/events
+   * Streams real-time Server-Sent Events (ready, bid events, 25s ping) for an auction.
+   *
+   * @param {import('express').Request} req
+   * @param {import('express').Response} res
+   * @param {import('express').NextFunction} next
+   */
+  const streamAuctionEvents = async (req, res, next) => {
+    const { id } = req.params;
+
+    try {
+      const auctionResult = await db.query(
+        `SELECT id FROM auctions WHERE id = $1`,
+        [id]
+      );
+
+      if (auctionResult.rows.length === 0) {
+        return next(new AppError(404, 'Auction not found'));
+      }
+
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      if (typeof res.flushHeaders === 'function') {
+        res.flushHeaders();
+      }
+
+      res.write('event: ready\ndata: {"status":"ready"}\n\n');
+
+      const channel = `auction:${id}`;
+      const onBid = (data) => {
+        res.write(`event: bid\ndata: ${JSON.stringify(data)}\n\n`);
+      };
+
+      if (eventBus) {
+        eventBus.on(channel, onBid);
+      }
+
+      const pingTimer = setInterval(() => {
+        res.write(': ping\n\n');
+      }, pingIntervalMs);
+
+      let cleanedUp = false;
+      const cleanup = () => {
+        if (cleanedUp) return;
+        cleanedUp = true;
+        clearInterval(pingTimer);
+        if (eventBus) {
+          eventBus.removeListener(channel, onBid);
+        }
+      };
+
+      req.on('close', cleanup);
+      res.on('close', cleanup);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  return {
+    createAuction,
+    updateAuction,
+    listAuctions,
+    getAuctionById,
+    placeBid,
+    getBidHistory,
+    streamAuctionEvents,
+  };
 }
 
 export default createAuctionController;
