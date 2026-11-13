@@ -5,8 +5,9 @@ import { closeExpiredAuctions } from '../services/auctionCloser.js';
  *
  * @param {Object} deps
  * @param {{ query: Function, connect?: Function }} deps.db - node-postgres compatible interface.
+ * @param {Object} [deps.cache] - LRU cache instance.
  */
-export function createAdminController({ db }) {
+export function createAdminController({ db, cache }) {
   /**
    * POST /api/admin/auctions/close-expired
    * Closes active expired auctions and returns winning details.
@@ -18,7 +19,7 @@ export function createAdminController({ db }) {
   const closeExpired = async (req, res, next) => {
     try {
       const now = req.body?.now ? new Date(req.body.now) : undefined;
-      const auctions = await closeExpiredAuctions({ db, now });
+      const auctions = await closeExpiredAuctions({ db, now, cache });
 
       return res.status(200).json({
         auctions,

@@ -18,11 +18,12 @@ import { createIdempotencyMiddleware } from '../middleware/idempotency.js';
  *
  * @param {Object} deps
  * @param {{ query: Function, connect?: Function }} deps.db - node-postgres compatible query interface.
+ * @param {Object} [deps.cache] - LRU cache instance.
  * @returns {import('express').Router}
  */
-export function createAuctionRouter({ db }) {
+export function createAuctionRouter({ db, cache }) {
   const router = express.Router();
-  const auctions = createAuctionController({ db });
+  const auctions = createAuctionController({ db, cache });
   const idempotency = createIdempotencyMiddleware({ db });
 
   const bidRateLimiter = createRateLimiter({
