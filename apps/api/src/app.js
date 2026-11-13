@@ -13,6 +13,7 @@ import { securityHeaders } from './middleware/securityHeaders.js';
 import { createCors } from './middleware/cors.js';
 import { createMetrics, checkMetricsAuth } from './services/metrics.js';
 import { createCache } from './services/cache.js';
+import { eventBus as defaultEventBus } from './services/eventBus.js';
 
 /**
  * Builds the Express application.
@@ -27,6 +28,8 @@ import { createCache } from './services/cache.js';
  * @param {Function} [deps.now] - Custom time provider function for metrics.
  * @param {Object} [deps.metrics] - Custom metrics collector instance.
  * @param {Object} [deps.cache] - Custom LRU cache instance.
+ * @param {import('node:events').EventEmitter} [deps.eventBus] - Custom event bus instance.
+ * @param {number} [deps.pingIntervalMs=25000] - Ping interval in milliseconds for SSE.
  * @returns {import('express').Express}
  */
 export function createApp({
@@ -38,10 +41,13 @@ export function createApp({
   now,
   metrics: injectedMetrics,
   cache: injectedCache,
+  eventBus: injectedEventBus,
+  pingIntervalMs,
 } = {}) {
   const app = express();
   const metrics = injectedMetrics || createMetrics({ now });
   const cache = injectedCache !== undefined ? injectedCache : createCache();
+  const eventBus = injectedEventBus !== undefined ? injectedEventBus : defaultEventBus;
 
   app.disable('x-powered-by');
 
@@ -60,7 +66,7 @@ export function createApp({
   });
 
   app.use('/api/users', createUserRouter({ db }));
-  app.use('/api/auctions', createAuctionRouter({ db, cache }));
+  app.use('/api/auctions', createAuctionRouter({ db, cache, eventBus, pingIntervalMs }));
   app.use('/api/admin', createAdminRouter({ db, cache }));
   app.use('/api/watchlist', createWatchlistRouter({ db }));
   app.use('/api/analytics', createAnalyticsRouter({ db }));

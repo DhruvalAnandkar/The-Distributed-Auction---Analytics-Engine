@@ -19,11 +19,13 @@ import { createIdempotencyMiddleware } from '../middleware/idempotency.js';
  * @param {Object} deps
  * @param {{ query: Function, connect?: Function }} deps.db - node-postgres compatible query interface.
  * @param {Object} [deps.cache] - LRU cache instance.
+ * @param {import('node:events').EventEmitter} [deps.eventBus] - Event bus instance.
+ * @param {number} [deps.pingIntervalMs] - Ping interval in milliseconds for SSE.
  * @returns {import('express').Router}
  */
-export function createAuctionRouter({ db, cache }) {
+export function createAuctionRouter({ db, cache, eventBus, pingIntervalMs }) {
   const router = express.Router();
-  const auctions = createAuctionController({ db, cache });
+  const auctions = createAuctionController({ db, cache, eventBus, pingIntervalMs });
   const idempotency = createIdempotencyMiddleware({ db });
 
   const bidRateLimiter = createRateLimiter({
@@ -34,6 +36,13 @@ export function createAuctionRouter({ db, cache }) {
 
   // GET /api/auctions
   router.get('/', validate(listAuctionsQuerySchema, 'query'), auctions.listAuctions);
+
+  // GET /api/auctions/:id/events
+  router.get(
+    '/:id/events',
+    validate(auctionIdParamSchema, 'params'),
+    auctions.streamAuctionEvents
+  );
 
   // GET /api/auctions/:id
   router.get('/:id', validate(auctionIdParamSchema, 'params'), auctions.getAuctionById);
