@@ -328,6 +328,7 @@ export function createAuctionController({
    * POST /api/auctions/:id/bids
    * Places a bid on an active auction using row-level locking.
    * Applies anti-sniping window extension if bid is placed in the last 2 minutes.
+   * Writes a BidPlaced domain event into the outbox in the same transaction.
    * Publishes auction:<id> to eventBus after the transaction COMMITs.
    *
    * @param {import('express').Request} req
@@ -408,6 +409,21 @@ export function createAuctionController({
         [id, userId, amount]
       );
 
+      const bid = bidResult.rows[0];
+
+      await client.query(
+        `INSERT INTO domain_events (event_type, payload) VALUES ($1, $2)`,
+        [
+          'BidPlaced',
+          JSON.stringify({
+            bidId: Number(bid.id),
+            auctionId: Number(id),
+            bidderId: Number(userId),
+            amount: Number(amount),
+          }),
+        ]
+      );
+
       if (previousHighestBidResult.rows.length > 0) {
         const prevBidderId = Number(previousHighestBidResult.rows[0].bidderId ?? previousHighestBidResult.rows[0].bidder_id);
         if (prevBidderId !== Number(userId)) {
@@ -450,8 +466,6 @@ export function createAuctionController({
       if (cache) {
         cache.delete(Number(id));
       }
-
-      const bid = bidResult.rows[0];
 
       const auctionResponse = {
         currentPrice: Number(amount),

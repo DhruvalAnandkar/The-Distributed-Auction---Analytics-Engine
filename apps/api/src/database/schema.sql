@@ -98,3 +98,15 @@ CREATE TABLE IF NOT EXISTS idempotency_keys(
 );
 
 CREATE INDEX IF NOT EXISTS idx_idempotency_keys_created ON idempotency_keys(created_at);
+
+-- Core DOMAIN_EVENTS outbox table
+CREATE TABLE IF NOT EXISTS domain_events(
+    id SERIAL PRIMARY KEY,
+    event_type VARCHAR(50) NOT NULL,
+    payload JSONB NOT NULL,
+    published_at TIMESTAMP WITH TIME ZONE,
+    claimed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_domain_events_unpublished ON domain_events(published_at, claimed_at, id);

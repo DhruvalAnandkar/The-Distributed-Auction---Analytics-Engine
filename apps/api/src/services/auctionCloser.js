@@ -8,6 +8,7 @@
 /**
  * Marks active auctions with ends_at <= now as CLOSED and identifies
  * the highest bidder as the winner within a database transaction.
+ * Writes AuctionClosed domain events to the outbox inside the same transaction.
  *
  * @param {Object} deps
  * @param {{ connect: Function }} deps.db - Node-postgres Pool or fakeDb instance.
@@ -75,6 +76,20 @@ export async function closeExpiredAuctions({ db, now, cache } = {}) {
         winningAmount: winningBid ? winningBid.winningAmount : null,
       };
     });
+
+    for (const res of results) {
+      await client.query(
+        `INSERT INTO domain_events (event_type, payload) VALUES ($1, $2)`,
+        [
+          'AuctionClosed',
+          JSON.stringify({
+            auctionId: res.auctionId,
+            winnerId: res.winnerId,
+            winningAmount: res.winningAmount,
+          }),
+        ]
+      );
+    }
 
     await client.query('COMMIT');
 
