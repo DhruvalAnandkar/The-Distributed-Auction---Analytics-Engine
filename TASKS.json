@@ -968,7 +968,9 @@
       "dependsOn": [
         "outbox-events"
       ],
-      "status": "pending"
+      "status": "pending",
+      "attempts": 1,
+      "lastError": "Bad escaped character in JSON at position 18757 (line 19 column 5832)"
     },
     {
       "id": "buy-now",
