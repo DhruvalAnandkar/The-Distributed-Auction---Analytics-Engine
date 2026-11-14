@@ -969,8 +969,8 @@
         "outbox-events"
       ],
       "status": "pending",
-      "attempts": 1,
-      "lastError": "Bad escaped character in JSON at position 18757 (line 19 column 5832)"
+      "attempts": 2,
+      "lastError": "Bad escaped character in JSON at position 18442 (line 19 column 5618)"
     },
     {
       "id": "buy-now",
