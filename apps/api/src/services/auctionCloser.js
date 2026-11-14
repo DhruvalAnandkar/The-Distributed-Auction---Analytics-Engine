@@ -1,8 +1,8 @@
 /**
  * @typedef {Object} ClosedAuctionResult
  * @property {number} auctionId - The unique identifier of the closed auction.
- * @property {number | null} winnerId - The user ID of the highest bidder, or null if no bids.
- * @property {number | null} winningAmount - The highest bid amount, or null if no bids.
+ * @property {number | null} winnerId - The user ID of the highest bidder, or null if no bids or reserve not met.
+ * @property {number | null} winningAmount - The highest bid amount, or null if no bids or reserve not met.
  */
 
 /**
@@ -27,7 +27,7 @@ export async function closeExpiredAuctions({ db, now, cache } = {}) {
       `UPDATE auctions
        SET status = 'CLOSED'
        WHERE status = $1 AND ends_at <= $2
-       RETURNING id`,
+       RETURNING id, reserve_price as "reservePrice"`,
       ['ACTIVE', cutoff]
     );
 
@@ -36,7 +36,14 @@ export async function closeExpiredAuctions({ db, now, cache } = {}) {
       return [];
     }
 
-    const closedAuctionIds = updateResult.rows.map((row) => Number(row.id));
+    const closedAuctionsMap = new Map();
+    const closedAuctionIds = updateResult.rows.map((row) => {
+      const id = Number(row.id);
+      closedAuctionsMap.set(id, {
+        reservePrice: row.reservePrice ?? row.reserve_price,
+      });
+      return id;
+    });
 
     const bidsResult = await client.query(
       `SELECT DISTINCT ON (auction_id)
@@ -70,10 +77,30 @@ export async function closeExpiredAuctions({ db, now, cache } = {}) {
 
     const results = closedAuctionIds.map((auctionId) => {
       const winningBid = winningBidsByAuction.get(auctionId);
+      const auctionMeta = closedAuctionsMap.get(auctionId);
+      const rawReserve = auctionMeta?.reservePrice;
+      const reservePrice = rawReserve !== null && rawReserve !== undefined ? Number(rawReserve) : null;
+
+      if (!winningBid || winningBid.winnerId === null || winningBid.winningAmount === null) {
+        return {
+          auctionId,
+          winnerId: null,
+          winningAmount: null,
+        };
+      }
+
+      if (reservePrice !== null && winningBid.winningAmount < reservePrice) {
+        return {
+          auctionId,
+          winnerId: null,
+          winningAmount: null,
+        };
+      }
+
       return {
         auctionId,
-        winnerId: winningBid ? winningBid.winnerId : null,
-        winningAmount: winningBid ? winningBid.winningAmount : null,
+        winnerId: winningBid.winnerId,
+        winningAmount: winningBid.winningAmount,
       };
     });
 
