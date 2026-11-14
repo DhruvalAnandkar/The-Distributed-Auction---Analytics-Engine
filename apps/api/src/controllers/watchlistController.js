@@ -1,4 +1,5 @@
 import AppError from '../utils/AppError.js';
+import formatAuction from '../utils/formatAuction.js';
 
 /**
  * Builds the watchlist controller with its dependencies injected.
@@ -12,7 +13,7 @@ export function createWatchlistController({ db }) {
    * Adds an auction to the authenticated user's watchlist idempotently.
    * Returns 201 when newly added, or 200 if already in the watchlist.
    *
-   * @param {import('express').Request<{ auctionId: string }>} req
+   * @param {import('express').Request<{ auctionId: string }>}
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
    */
@@ -63,7 +64,7 @@ export function createWatchlistController({ db }) {
    * Removes an auction from the authenticated user's watchlist.
    * Always returns 204.
    *
-   * @param {import('express').Request<{ auctionId: string }>} req
+   * @param {import('express').Request<{ auctionId: string }>}
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
    */
@@ -101,6 +102,7 @@ export function createWatchlistController({ db }) {
           a.title,
           a.description,
           a.start_price as "startPrice",
+          a.reserve_price as "reservePrice",
           a.current_price as "currentPrice",
           a.status,
           a.seller_id as "sellerId",
@@ -113,27 +115,7 @@ export function createWatchlistController({ db }) {
         [userId]
       );
 
-      const auctions = result.rows.map((row) => ({
-        id: Number(row.id),
-        title: row.title,
-        description: row.description !== undefined ? row.description : null,
-        startPrice:
-          row.startPrice !== undefined
-            ? typeof row.startPrice === 'string'
-              ? Number(row.startPrice)
-              : row.startPrice
-            : Number(row.start_price),
-        currentPrice:
-          row.currentPrice !== undefined
-            ? typeof row.currentPrice === 'string'
-              ? Number(row.currentPrice)
-              : row.currentPrice
-            : Number(row.current_price),
-        status: row.status,
-        sellerId: Number(row.sellerId ?? row.seller_id),
-        endsAt: row.endsAt ?? row.ends_at,
-        createdAt: row.createdAt ?? row.created_at,
-      }));
+      const auctions = result.rows.map((row) => formatAuction(row, userId));
 
       return res.status(200).json({
         auctions,

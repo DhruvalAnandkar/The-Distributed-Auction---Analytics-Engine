@@ -19,6 +19,17 @@ export const createAuctionSchema = z.object({
       },
       { message: 'Start price can have at most 2 decimal places' }
     ),
+  reservePrice: z
+    .number()
+    .positive('Reserve price must be greater than 0')
+    .refine(
+      (val) => {
+        const decimalPart = val.toString().split('.')[1];
+        return !decimalPart || decimalPart.length <= 2;
+      },
+      { message: 'Reserve price can have at most 2 decimal places' }
+    )
+    .optional(),
   endsAt: z
     .string({ required_error: 'Ends at date is required' }),
 }).refine(
@@ -33,6 +44,17 @@ export const createAuctionSchema = z.object({
   { 
     message: 'Ends at must be an ISO date at least 1 minute in the future',
     path: ['endsAt'],
+  }
+).refine(
+  (data) => {
+    if (data.reservePrice !== undefined && data.reservePrice !== null) {
+      return data.reservePrice >= data.startPrice;
+    }
+    return true;
+  },
+  {
+    message: 'Reserve price must be greater than or equal to start price',
+    path: ['reservePrice'],
   }
 );
 

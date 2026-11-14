@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS auctions(
     title VARCHAR(100) NOT NULL,
     description TEXT,
     start_price NUMERIC(12, 2) NOT NULL CHECK (start_price > 0),
+    reserve_price NUMERIC(12, 2) CHECK (reserve_price IS NULL OR reserve_price >= start_price),
     current_price NUMERIC(12, 2) NOT NULL CHECK (current_price >= start_price),
     status VARCHAR(20) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'ACTIVE', 'CLOSED')),
     seller_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -45,6 +46,7 @@ CREATE TABLE IF NOT EXISTS auctions(
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE auctions ADD COLUMN IF NOT EXISTS reserve_price NUMERIC(12, 2) CHECK (reserve_price IS NULL OR reserve_price >= start_price);
 ALTER TABLE auctions ADD COLUMN IF NOT EXISTS original_ends_at TIMESTAMP WITH TIME ZONE;
 
 -- Index frequently scanned columns to optimize query execuation

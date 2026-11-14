@@ -6,6 +6,7 @@ import {
   hashToken,
 } from '../services/tokenService.js';
 import AppError from '../utils/AppError.js';
+import formatAuction from '../utils/formatAuction.js';
 
 /**
  * @typedef {Object} UserRegistrationPayload
@@ -201,7 +202,7 @@ export function createUserController({ db }) {
    * Rotates a refresh token inside a FOR UPDATE transaction.
    * If a revoked token is reused, revokes the entire family and returns 401.
    *
-   * @param {import('express').Request} req
+   * @param {import('express').Request}
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
    */
@@ -309,7 +310,7 @@ export function createUserController({ db }) {
    *
    * Revokes the current refresh token inside a FOR UPDATE transaction.
    *
-   * @param {import('express').Request} req
+   * @param {import('express').Request}
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
    */
@@ -538,7 +539,7 @@ export function createUserController({ db }) {
    * Fetches public user profile with SQL-computed auctionCount.
    * Never exposes email or password hash.
    *
-   * @param {import('express').Request} req
+   * @param {import('express').Request}
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
    */
@@ -617,6 +618,7 @@ export function createUserController({ db }) {
           title,
           description,
           start_price as "startPrice",
+          reserve_price as "reservePrice",
           current_price as "currentPrice",
           status,
           seller_id as "sellerId",
@@ -630,7 +632,8 @@ export function createUserController({ db }) {
       );
 
       const hasMore = result.rows.length > limit;
-      const auctions = hasMore ? result.rows.slice(0, limit) : result.rows;
+      const rows = hasMore ? result.rows.slice(0, limit) : result.rows;
+      const auctions = rows.map((row) => formatAuction(row, userId));
       const nextCursor = hasMore ? auctions[auctions.length - 1].id : null;
 
       return res.status(200).json({

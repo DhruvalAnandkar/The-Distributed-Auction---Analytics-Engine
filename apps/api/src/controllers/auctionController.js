@@ -2,12 +2,14 @@ import crypto from 'node:crypto';
 import AppError from '../utils/AppError.js';
 import { escapeLike } from '../utils/escapeLike.js';
 import defaultEventBus from '../services/eventBus.js';
+import { formatAuction, getUserIdFromReq } from '../utils/formatAuction.js';
 
 /**
  * @typedef {Object} AuctionCreationPayload
  * @property {string} title - Auction title.
  * @property {string} [description] - Optional auction description.
  * @property {number} startPrice - Starting price (> 0).
+ * @property {number} [reservePrice] - Optional reserve price (>= startPrice).
  * @property {string} endsAt - ISO date string at least 1 min in the future.
  */
 
@@ -36,40 +38,68 @@ export function createAuctionController({
   /**
    * POST /api/auctions
    * Creates a new auction associated with the authenticated user.
-   *
+ *
    * @param {import('express').Request<{}, {}, AuctionCreationPayload>} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
    */
   const createAuction = async (req, res, next) => {
-    const { title, description, startPrice, endsAt } = req.body;
+    const { title, description, startPrice, reservePrice, endsAt } = req.body;
     const sellerId = req.user.id;
 
     try {
-      const result = await db.query(
-        `INSERT INTO auctions (
-          title,
-          description,
-          start_price,
-          current_price,
-          status,
-          seller_id,
-          ends_at
-        ) VALUES ($1, $2, $3, $3, 'ACTIVE', $4, $5)
-        RETURNING 
-          id,
-          title,
-          description,
-          start_price as "startPrice",
-          current_price as "currentPrice",
-          status,
-          seller_id as "sellerId",
-          ends_at as "endsAt",
-          created_at as "createdAt"`,
-        [title, description || null, startPrice, sellerId, endsAt]
-      );
+      let result;
+      if (reservePrice !== undefined && reservePrice !== null) {
+        result = await db.query(
+          `INSERT INTO auctions (
+            title,
+            description,
+            start_price,
+            reserve_price,
+            current_price,
+            status,
+            seller_id,
+            ends_at
+          ) VALUES ($1, $2, $3, $4, $3, 'ACTIVE', $5, $6)
+          RETURNING 
+            id,
+            title,
+            description,
+            start_price as "startPrice",
+            reserve_price as "reservePrice",
+            current_price as "currentPrice",
+            status,
+            seller_id as "sellerId",
+            ends_at as "endsAt",
+            created_at as "createdAt"`,
+          [title, description || null, startPrice, reservePrice, sellerId, endsAt]
+        );
+      } else {
+        result = await db.query(
+          `INSERT INTO auctions (
+            title,
+            description,
+            start_price,
+            current_price,
+            status,
+            seller_id,
+            ends_at
+          ) VALUES ($1, $2, $3, $3, 'ACTIVE', $4, $5)
+          RETURNING 
+            id,
+            title,
+            description,
+            start_price as "startPrice",
+            current_price as "currentPrice",
+            status,
+            seller_id as "sellerId",
+            ends_at as "endsAt",
+            created_at as "createdAt"`,
+          [title, description || null, startPrice, sellerId, endsAt]
+        );
+      }
 
-      const auction = result.rows[0];
+      const auction = formatAuction(result.rows[0], sellerId);
 
       return res.status(201).json({
         auction,
@@ -83,7 +113,7 @@ export function createAuctionController({
    * PATCH /api/auctions/:id
    * Updates an auction's title, description, or endsAt before any bidding.
    * Only allowed for the seller when status is PENDING or ACTIVE and no bids exist.
-   *
+ *
    * @param {import('express').Request<{ id: string }, {}, AuctionUpdatePayload>} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
@@ -156,6 +186,7 @@ export function createAuctionController({
            title,
            description,
            start_price as "startPrice",
+           reserve_price as "reservePrice",
            current_price as "currentPrice",
            status,
            seller_id as "sellerId",
@@ -173,7 +204,7 @@ export function createAuctionController({
       }
 
       return res.status(200).json({
-        auction: updateResult.rows[0],
+        auction: formatAuction(updateResult.rows[0], userId),
       });
     } catch (err) {
       next(err);
@@ -183,13 +214,14 @@ export function createAuctionController({
   /**
    * GET /api/auctions
    * Lists auctions with optional status filter, case-insensitive title search, and keyset pagination.
-   *
+ *
    * @param {import('express').Request} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
    */
   const listAuctions = async (req, res, next) => {
     const { status, limit, cursor, q } = req.query;
+    const userId = getUserIdFromReq(req);
 
     try {
       const conditions = [];
@@ -222,6 +254,7 @@ export function createAuctionController({
           title,
           description,
           start_price as "startPrice",
+          reserve_price as "reservePrice",
           current_price as "currentPrice",
           status,
           seller_id as "sellerId",
@@ -235,7 +268,8 @@ export function createAuctionController({
       );
 
       const hasMore = result.rows.length > limit;
-      const auctions = hasMore ? result.rows.slice(0, limit) : result.rows;
+      const rows = hasMore ? result.rows.slice(0, limit) : result.rows;
+      const auctions = rows.map((row) => formatAuction(row, userId));
       const nextCursor = hasMore ? auctions[auctions.length - 1].id : null;
 
       return res.status(200).json({
@@ -254,7 +288,7 @@ export function createAuctionController({
    * Fetches a single auction by its unique identifier (read-through cache enabled).
    * Sets ETag (SHA-256 of the JSON body) and Cache-Control headers.
    * Returns 304 when If-None-Match header matches the ETag.
-   *
+ *
    * @param {import('express').Request} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
@@ -262,17 +296,19 @@ export function createAuctionController({
   const getAuctionById = async (req, res, next) => {
     const { id } = req.params;
     const auctionId = Number(id);
+    const userId = getUserIdFromReq(req);
 
     try {
-      let auction = cache?.get(auctionId);
+      let rawAuction = cache?.get(auctionId);
 
-      if (!auction) {
+      if (!rawAuction) {
         const result = await db.query(
           `SELECT 
             id,
             title,
             description,
             start_price as "startPrice",
+            reserve_price as "reservePrice",
             current_price as "currentPrice",
             status,
             seller_id as "sellerId",
@@ -287,11 +323,13 @@ export function createAuctionController({
           return next(new AppError(404, 'Auction not found'));
         }
 
-        auction = result.rows[0];
+        rawAuction = result.rows[0];
         if (cache) {
-          cache.set(auctionId, auction);
+          cache.set(auctionId, rawAuction);
         }
       }
+
+      const auction = formatAuction(rawAuction, userId);
 
       const body = {
         auction,
@@ -330,7 +368,7 @@ export function createAuctionController({
    * Applies anti-sniping window extension if bid is placed in the last 2 minutes.
    * Writes a BidPlaced domain event into the outbox in the same transaction.
    * Publishes auction:<id> to eventBus after the transaction COMMITs.
-   *
+ *
    * @param {import('express').Request} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
@@ -349,6 +387,7 @@ export function createAuctionController({
         `SELECT 
           id,
           current_price as "currentPrice",
+          reserve_price as "reservePrice",
           status,
           seller_id as "sellerId",
           ends_at as "endsAt",
@@ -471,6 +510,12 @@ export function createAuctionController({
         currentPrice: Number(amount),
       };
 
+      const rawReserve = auction.reservePrice ?? auction.reserve_price;
+      if (rawReserve !== undefined) {
+        const reservePrice = rawReserve !== null ? Number(rawReserve) : null;
+        auctionResponse.reserveMet = reservePrice === null || Number(amount) >= reservePrice;
+      }
+
       if (isAntiSnipingWindow) {
         auctionResponse.endsAt = updatedEndsAt.toISOString();
       }
@@ -510,7 +555,7 @@ export function createAuctionController({
   /**
    * GET /api/auctions/:id/bids
    * Fetches bid history for an auction, newest first, with bidder usernames and highest bid.
-   *
+ *
    * @param {import('express').Request} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
@@ -568,7 +613,7 @@ export function createAuctionController({
   /**
    * GET /api/auctions/:id/events
    * Streams real-time Server-Sent Events (ready, bid events, 25s ping) for an auction.
-   *
+ *
    * @param {import('express').Request} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next

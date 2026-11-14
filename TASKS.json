@@ -968,9 +968,19 @@
       "dependsOn": [
         "outbox-events"
       ],
-      "status": "pending",
-      "attempts": 2,
-      "lastError": "Bad escaped character in JSON at position 18442 (line 19 column 5618)"
+      "status": "done",
+      "attempts": 3,
+      "completedAt": "2026-11-14T21:44:53.233Z",
+      "files": [
+        "apps/api/src/database/schema.sql",
+        "apps/api/src/utils/formatAuction.js",
+        "apps/api/src/validators/auctionValidators.js",
+        "apps/api/src/controllers/auctionController.js",
+        "apps/api/src/controllers/userController.js",
+        "apps/api/src/controllers/watchlistController.js",
+        "apps/api/src/services/auctionCloser.js",
+        "apps/api/test/auctions.reservePrice.test.js"
+      ]
     },
     {
       "id": "buy-now",
