@@ -5,6 +5,16 @@ import defaultEventBus from '../services/eventBus.js';
 import { formatAuction, getUserIdFromReq } from '../utils/formatAuction.js';
 
 /**
+ * Whitelist map from bucket query parameter values to PostgreSQL date_trunc units.
+ * User input is never interpolated into SQL; units are resolved strictly from this map.
+ */
+export const BUCKET_DATE_TRUNC_MAP = Object.freeze({
+  minute: 'minute',
+  hour: 'hour',
+  day: 'day',
+});
+
+/**
  * @typedef {Object} AuctionCreationPayload
  * @property {string} title - Auction title.
  * @property {string} [description] - Optional auction description.
@@ -38,7 +48,7 @@ export function createAuctionController({
   /**
    * POST /api/auctions
    * Creates a new auction associated with the authenticated user.
- *
+   *
    * @param {import('express').Request<{}, {}, AuctionCreationPayload>} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
@@ -113,7 +123,7 @@ export function createAuctionController({
    * PATCH /api/auctions/:id
    * Updates an auction's title, description, or endsAt before any bidding.
    * Only allowed for the seller when status is PENDING or ACTIVE and no bids exist.
- *
+   *
    * @param {import('express').Request<{ id: string }, {}, AuctionUpdatePayload>} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
@@ -214,7 +224,7 @@ export function createAuctionController({
   /**
    * GET /api/auctions
    * Lists auctions with optional status filter, case-insensitive title search, and keyset pagination.
- *
+   *
    * @param {import('express').Request} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
@@ -288,7 +298,7 @@ export function createAuctionController({
    * Fetches a single auction by its unique identifier (read-through cache enabled).
    * Sets ETag (SHA-256 of the JSON body) and Cache-Control headers.
    * Returns 304 when If-None-Match header matches the ETag.
- *
+   *
    * @param {import('express').Request} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
@@ -368,7 +378,7 @@ export function createAuctionController({
    * Applies anti-sniping window extension if bid is placed in the last 2 minutes.
    * Writes a BidPlaced domain event into the outbox in the same transaction.
    * Publishes auction:<id> to eventBus after the transaction COMMITs.
- *
+   *
    * @param {import('express').Request} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
@@ -555,7 +565,7 @@ export function createAuctionController({
   /**
    * GET /api/auctions/:id/bids
    * Fetches bid history for an auction, newest first, with bidder usernames and highest bid.
- *
+   *
    * @param {import('express').Request} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
@@ -611,9 +621,72 @@ export function createAuctionController({
   };
 
   /**
+   * GET /api/auctions/:id/price-history
+   * Fetches auction price history aggregated into time buckets (minute, hour, day).
+   *
+   * @param {import('express').Request} req
+   * @param {import('express').Response} res
+   * @param {import('express').NextFunction} next
+   */
+  const getPriceHistory = async (req, res, next) => {
+    const { id } = req.params;
+    const { bucket } = req.query;
+
+    const truncUnit = BUCKET_DATE_TRUNC_MAP[bucket];
+    if (!truncUnit) {
+      return next(new AppError(400, 'Invalid bucket parameter'));
+    }
+
+    try {
+      const auctionResult = await db.query(
+        `SELECT id FROM auctions WHERE id = $1`,
+        [id]
+      );
+
+      if (auctionResult.rows.length === 0) {
+        return next(new AppError(404, 'Auction not found'));
+      }
+
+      const result = await db.query(
+        `SELECT 
+          date_trunc($2, b.created_at) as "bucketStart",
+          MAX(b.amount)::numeric as "maxAmount",
+          COUNT(b.id)::int as "bidCount"
+        FROM bids b
+        WHERE b.auction_id = $1
+        GROUP BY date_trunc($2, b.created_at)
+        ORDER BY "bucketStart" ASC`,
+        [id, truncUnit]
+      );
+
+      const points = result.rows.map((row) => {
+        const rawBucketStart = row.bucketStart ?? row.bucket_start;
+        const bucketStart =
+          rawBucketStart instanceof Date
+            ? rawBucketStart.toISOString()
+            : rawBucketStart;
+
+        return {
+          bucketStart,
+          maxAmount: Number(row.maxAmount ?? row.max_amount ?? 0),
+          bidCount: Number(row.bidCount ?? row.bid_count ?? 0),
+        };
+      });
+
+      return res.status(200).json({
+        auctionId: Number(id),
+        bucket,
+        points,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
    * GET /api/auctions/:id/events
    * Streams real-time Server-Sent Events (ready, bid events, 25s ping) for an auction.
- *
+   *
    * @param {import('express').Request} req
    * @param {import('express').Response} res
    * @param {import('express').NextFunction} next
@@ -677,6 +750,7 @@ export function createAuctionController({
     getAuctionById,
     placeBid,
     getBidHistory,
+    getPriceHistory,
     streamAuctionEvents,
   };
 }
