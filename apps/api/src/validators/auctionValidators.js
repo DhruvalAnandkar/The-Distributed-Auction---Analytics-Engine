@@ -52,7 +52,7 @@ export const createAuctionSchema = z.object({
     }
     return true;
   },
-  {
+  { 
     message: 'Reserve price must be greater than or equal to start price',
     path: ['reservePrice'],
   }
@@ -139,4 +139,11 @@ export const placeBidSchema = z.object({
  */
 export const bidHistoryQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+/**
+ * Zod schema for validating price history query parameters.
+ */
+export const priceHistoryQuerySchema = z.object({
+  bucket: z.enum(['minute', 'hour', 'day']),
 });
