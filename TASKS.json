@@ -1000,8 +1000,8 @@
         "reserve-price"
       ],
       "status": "pending",
-      "attempts": 1,
-      "lastError": "Bad escaped character in JSON at position 16381 (line 19 column 2104)"
+      "attempts": 2,
+      "lastError": "Bad control character in string literal in JSON at position 46184 (line 27 column 3219)"
     },
     {
       "id": "price-history",
