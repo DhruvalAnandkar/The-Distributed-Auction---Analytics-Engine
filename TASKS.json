@@ -999,7 +999,9 @@
       "dependsOn": [
         "reserve-price"
       ],
-      "status": "pending"
+      "status": "pending",
+      "attempts": 1,
+      "lastError": "Bad escaped character in JSON at position 16381 (line 19 column 2104)"
     },
     {
       "id": "price-history",
