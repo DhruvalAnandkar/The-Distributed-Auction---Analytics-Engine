@@ -999,9 +999,9 @@
       "dependsOn": [
         "reserve-price"
       ],
-      "status": "pending",
-      "attempts": 2,
-      "lastError": "Bad control character in string literal in JSON at position 46184 (line 27 column 3219)"
+      "status": "blocked",
+      "attempts": 3,
+      "lastError": "Bad control character in string literal in JSON at position 47356 (line 27 column 3958)"
     },
     {
       "id": "price-history",
