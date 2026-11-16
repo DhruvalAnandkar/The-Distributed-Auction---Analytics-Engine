@@ -49,6 +49,9 @@ export function createApp({
   const cache = injectedCache !== undefined ? injectedCache : createCache();
   const eventBus = injectedEventBus !== undefined ? injectedEventBus : defaultEventBus;
 
+  app.locals.db = db;
+  app.set('db', db);
+
   app.disable('x-powered-by');
 
   app.use(securityHeaders);
