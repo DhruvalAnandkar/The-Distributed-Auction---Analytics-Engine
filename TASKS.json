@@ -1043,7 +1043,18 @@
         "apps/api/test/**"
       ],
       "dependsOn": [],
-      "status": "pending"
+      "status": "done",
+      "completedAt": "2026-11-16T03:05:04.785Z",
+      "attempts": 1,
+      "files": [
+        "apps/api/src/database/schema.sql",
+        "apps/api/src/middleware/requireRole.js",
+        "apps/api/src/validators/adminValidators.js",
+        "apps/api/src/controllers/adminController.js",
+        "apps/api/src/routes/adminRoutes.js",
+        "apps/api/src/app.js",
+        "apps/api/test/userRoles.test.js"
+      ]
     },
     {
       "id": "seller-ratings",
